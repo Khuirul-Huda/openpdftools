@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { i18n } from '$lib/i18n/index.svelte';
+	import { resolveRoute } from '$app/paths';
 	import Seo from '$lib/components/Seo.svelte';
 </script>
 
@@ -57,7 +58,7 @@
 						Popular
 					</span>
 					<a
-						href="/{i18n.current}/tools/split-certificate"
+						href={resolveRoute('/[lang]/tools/split-certificate', { lang: i18n.current })}
 						class="inline-flex items-center gap-2 px-5 py-2.5 text-xs font-bold text-white bg-blue-600 hover:bg-blue-500 active:scale-[0.98] rounded-xl shadow-[0_4px_14px_rgba(37,99,235,0.3)] hover:shadow-glow-blue-lg transition-all duration-300 group-hover:-translate-y-0.5"
 					>
 						<span>{i18n.t('dashboard.openTool')}</span>

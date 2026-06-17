@@ -1,21 +1,68 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import { i18n } from '$lib/i18n/index.svelte';
+	import { resolveRoute } from '$app/paths';
 	import { toast } from '$lib/components/toast.svelte';
 	import Seo from '$lib/components/Seo.svelte';
 
+	// Svelte 5 & TypeScript specific interfaces for typing libraries safely without using 'any'
+	interface PdfJsTextItem {
+		str: string;
+	}
+
+	interface PdfJsPage {
+		getViewport: (options: { scale: number }) => { width: number; height: number };
+		render: (options: { canvasContext: CanvasRenderingContext2D; viewport: unknown }) => { promise: Promise<void> };
+		getTextContent: () => Promise<{ items: PdfJsTextItem[] }>;
+	}
+
+	interface PdfJsDocument {
+		getPage: (pageNum: number) => Promise<PdfJsPage>;
+	}
+
+	interface PdfJsModule {
+		GlobalWorkerOptions: { workerSrc: string | null };
+		getDocument: (options: { data: ArrayBuffer }) => { promise: Promise<PdfJsDocument> };
+	}
+
+	type PdfLibPage = unknown;
+
+	interface PdfLibDocument {
+		getPageCount: () => number;
+		copyPages: (srcDoc: PdfLibDocument, pageIndexes: number[]) => Promise<PdfLibPage[]>;
+		addPage: (page: PdfLibPage) => void;
+		save: () => Promise<Uint8Array>;
+	}
+
+	interface PdfLibModule {
+		PDFDocument: {
+			create: () => Promise<PdfLibDocument>;
+			load: (data: ArrayBuffer) => Promise<PdfLibDocument>;
+		};
+	}
+
+	interface JSZipInstance {
+		file: (name: string, data: Uint8Array) => void;
+		generateAsync: (options: { type: 'blob' }) => Promise<Blob>;
+	}
+
+	interface JSZipModule {
+		default?: unknown;
+		new (): JSZipInstance;
+	}
+
 	// Reactive States
-	let pdfjs: any = $state(null);
-	let PDFLib: any = $state(null);
-	let JSZip: any = $state(null);
+	let pdfjs = $state<PdfJsModule | null>(null);
+	let PDFLib = $state<PdfLibModule | null>(null);
+	let JSZip = $state<JSZipModule | null>(null);
 
 	let loadingLibs = $state(true);
 	let isDragging = $state(false);
 	let fileInput: HTMLInputElement | null = $state(null);
 
 	// Document State
-	let globalPdfJsDoc: any = $state(null);
-	let globalPdfLibDoc: any = $state(null);
+	let globalPdfJsDoc = $state<PdfJsDocument | null>(null);
+	let globalPdfLibDoc = $state<PdfLibDocument | null>(null);
 	let fileName = $state('');
 	let fileSize = $state('');
 	let totalPages = $state(0);
@@ -70,22 +117,22 @@
 	onMount(async () => {
 		addLog(i18n.t('tools.splitPdf.logs.ready'));
 		try {
-			const pdfjsModule = await import('pdfjs-dist');
+			const pdfjsModule = await import('pdfjs-dist') as unknown as PdfJsModule;
 			pdfjs = pdfjsModule;
 			// Use the bundled worker from pdfjs-dist
 			const pdfjsWorker = await import('pdfjs-dist/build/pdf.worker.min.mjs?url');
 			pdfjs.GlobalWorkerOptions.workerSrc = pdfjsWorker.default;
 
-			const pdfLibModule = await import('pdf-lib');
+			const pdfLibModule = await import('pdf-lib') as unknown as PdfLibModule;
 			PDFLib = pdfLibModule;
 
 			const jszipModule = await import('jszip');
-			JSZip = jszipModule.default || jszipModule;
+			JSZip = (jszipModule.default || jszipModule) as unknown as JSZipModule;
 
 			loadingLibs = false;
-		} catch (err: any) {
+		} catch (err) {
 			console.error("Libraries loading failed:", err);
-			addLog(i18n.t('tools.splitPdf.logs.failed', { error: err.message }), 'error');
+			addLog(i18n.t('tools.splitPdf.logs.failed', { error: (err as Error).message }), 'error');
 		}
 	});
 
@@ -117,6 +164,8 @@
 			const arrayBuffer1 = await file.arrayBuffer();
 			const arrayBuffer2 = arrayBuffer1.slice(0);
 
+			if (!pdfjs || !PDFLib) return;
+
 			globalPdfJsDoc = await pdfjs.getDocument({ data: arrayBuffer1 }).promise;
 			globalPdfLibDoc = await PDFLib.PDFDocument.load(arrayBuffer2);
 
@@ -126,11 +175,11 @@
 
 			await loadPageText(1);
 			guessInitialTarget();
-		} catch (err: any) {
+		} catch (err) {
 			console.error("Error parsing file:", err);
-			addLog(i18n.t('tools.splitPdf.logs.failed', { error: err.message }), 'error');
+			addLog(i18n.t('tools.splitPdf.logs.failed', { error: (err as Error).message }), 'error');
 			stepParsePdf = 'error';
-			toast.show(i18n.t('tools.splitPdf.logs.failed', { error: err.message }), 'error');
+			toast.show(i18n.t('tools.splitPdf.logs.failed', { error: (err as Error).message }), 'error');
 		}
 	}
 
@@ -168,20 +217,20 @@
 			
 			// Map item strings & clean empty lines
 			const lines = textContent.items
-				.map((item: any) => item.str.trim())
+				.map((item: PdfJsTextItem) => item.str.trim())
 				.filter((str: string) => str.length > 0);
 
 			pageLinesCache[pageNum] = lines;
-		} catch (err: any) {
+		} catch (err) {
 			console.error("Error loading page text:", err);
-			addLog(`Failed to extract page ${pageNum} text: ${err.message}`, 'error');
+			addLog(`Failed to extract page ${pageNum} text: ${(err as Error).message}`, 'error');
 		} finally {
 			isParsingText = false;
 		}
 	}
 
 	// Render page visuals to Canvas
-	async function renderPageCanvas(pageNum: number) {
+	async function renderPageCanvas(pageNum: number, currentZoom: number) {
 		if (!globalPdfJsDoc || !canvasElement) return;
 		isRenderingCanvas = true;
 
@@ -189,7 +238,7 @@
 			const page = await globalPdfJsDoc.getPage(pageNum);
 			
 			// Dynamic scale based on current preview zoom
-			const scale = (canvasZoom / 100) * 1.2;
+			const scale = (currentZoom / 100) * 1.2;
 			const viewport = page.getViewport({ scale });
 			const canvas = canvasElement;
 			const context = canvas.getContext('2d');
@@ -203,7 +252,7 @@
 				};
 				await page.render(renderContext).promise;
 			}
-		} catch (err: any) {
+		} catch (err) {
 			console.error("Canvas rendering failed:", err);
 		} finally {
 			isRenderingCanvas = false;
@@ -221,7 +270,7 @@
 		const parsing = isParsingText;
 
 		if (doc && page && canvas && tab === 'preview' && !parsing) {
-			renderPageCanvas(page);
+			renderPageCanvas(page, zoom);
 		}
 	});
 
@@ -285,12 +334,14 @@
 	}
 
 	function sanitizeFilename(name: string): string {
-		return name.replace(/[<>:"/\\|?*\x00-\x1F]/g, "").trim() || "Recipient";
+		const range = '\\x00' + '-' + '\\x1F';
+		const controlRegex = new RegExp('[' + range + ']', 'g');
+		return name.replace(/[<>:"/\\|?*]/g, "").replace(controlRegex, "").trim() || "Recipient";
 	}
 
 	// Execute splitting procedure
 	async function executePdfSplit() {
-		if (!globalPdfLibDoc || !globalPdfJsDoc) {
+		if (!globalPdfLibDoc || !globalPdfJsDoc || !PDFLib || !JSZip) {
 			toast.show(i18n.t('tools.splitPdf.toastPdfRequired'), 'error');
 			return;
 		}
@@ -351,9 +402,9 @@
 			stepPackageZip = 'success';
 			toast.show(i18n.t('tools.splitPdf.toastSuccess'), 'success');
 
-		} catch (err: any) {
+		} catch (err) {
 			console.error("PDF execution failed:", err);
-			addLog(i18n.t('tools.splitPdf.logs.error', { error: err.message }), 'error');
+			addLog(i18n.t('tools.splitPdf.logs.error', { error: (err as Error).message }), 'error');
 			stepExtractNames = 'error';
 			stepPackageZip = 'error';
 			toast.show(i18n.t('tools.splitPdf.toastError'), 'error');
@@ -373,6 +424,7 @@
 		return val;
 	});
 
+	// Zoom operations
 	function adjustZoom(factor: number) {
 		const newZoom = canvasZoom + factor;
 		if (newZoom >= 50 && newZoom <= 200) {
@@ -398,7 +450,7 @@
 {:else}
 	<div class="space-y-6 animate-fade-in max-w-7xl mx-auto">
 		<!-- Navigation back button -->
-		<a href="/{i18n.current}" class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 transition">
+		<a href={resolveRoute('/[lang]', { lang: i18n.current })} class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 transition">
 			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
 			</svg>
@@ -519,8 +571,8 @@
 							<span class="text-blue-600">💡</span> {i18n.t('tools.splitPdf.step2InstructionTitle')}
 						</p>
 						<ol class="list-decimal pl-4.5 space-y-1.5 text-slate-600 font-semibold">
-						{#each i18n.tArray('tools.splitPdf.step2Instructions') as instruction}
-							<li>{@html instruction}</li>
+						{#each i18n.tArray('tools.splitPdf.step2Instructions') as instruction, i (i)}
+							<li>{instruction}</li>
 						{/each}
 						</ol>
 					</div>
@@ -708,7 +760,7 @@
 					</div>
 
 					<!-- Inspector workbench contents -->
-					<div class="flex-grow overflow-y-auto min-h-0 relative">
+					<div class="grow overflow-y-auto min-h-0 relative">
 						{#if !globalPdfJsDoc}
 							<!-- Empty screen -->
 							<div class="flex flex-col items-center justify-center h-full text-slate-400 py-10 font-medium select-none">
@@ -732,7 +784,7 @@
 											<p class="text-xs">{i18n.t('tools.splitPdf.inspectorNoText')}</p>
 										</div>
 									{:else}
-										{#each lines as line, index}
+										{#each lines as line, index (index)}
 											{@const isSelected = selectedLineIndex === index}
 											<button
 												onclick={() => selectLine(index)}
@@ -804,7 +856,7 @@
 								</div>
 
 								<!-- Canvas Scroll Container -->
-								<div class="flex-grow w-full overflow-auto flex items-center justify-center bg-dot-grid-dark rounded border border-slate-950/20 max-h-[360px]">
+								<div class="grow w-full overflow-auto flex items-center justify-center bg-dot-grid-dark rounded border border-slate-950/20 max-h-[360px]">
 									<canvas bind:this={canvasElement} class="max-w-full max-h-full object-contain rounded border border-slate-950 shadow-2xl transition-all duration-300"></canvas>
 								</div>
 							</div>
@@ -831,12 +883,12 @@
 
 					<div
 						id="log-terminal"
-						class="flex-grow bg-slate-950 border border-slate-900 rounded-xl p-4 overflow-y-auto font-mono text-[10px] text-slate-350 select-text scrollbar-thin shadow-inner whitespace-pre-wrap space-y-1 relative"
+						class="grow bg-slate-950 border border-slate-900 rounded-xl p-4 overflow-y-auto font-mono text-[10px] text-slate-350 select-text scrollbar-thin shadow-inner whitespace-pre-wrap space-y-1 relative"
 					>
 						<!-- Scanline overlay effect -->
-						<div class="absolute inset-0 bg-gradient-to-b from-transparent to-black/10 pointer-events-none select-none"></div>
+						<div class="absolute inset-0 bg-linear-to-b from-transparent to-black/10 pointer-events-none select-none"></div>
 						
-						{#each logs as log}
+						{#each logs as log, i (i)}
 							<div class="leading-relaxed">
 								<span class="text-slate-500 select-none">[{log.time}]</span>
 								<span class="

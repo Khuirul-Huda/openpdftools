@@ -1,7 +1,9 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { goto } from '$app/navigation';
-	import { i18n, type Locale } from '$lib/i18n/index.svelte';
+	import { resolveRoute } from '$app/paths';
+	import { i18n } from '$lib/i18n/index.svelte';
+	import type { Locale } from '$lib/i18n/index.svelte';
 	import Toast from '$lib/components/Toast.svelte';
 
 	let { children } = $props();
@@ -18,13 +20,12 @@
 
 	function changeLanguage(newLang: Locale) {
 		showLangDropdown = false;
-		// Update URL path
-		const pathname = page.url.pathname;
-		const segments = pathname.split('/');
-		// segments[1] is the current lang segment (e.g. 'en' or 'id')
-		segments[1] = newLang;
-		const newPath = segments.join('/');
-		goto(newPath);
+		const routeId = page.route.id;
+		if (routeId) {
+			goto(resolveRoute(routeId as '/[lang]', { ...page.params, lang: newLang }));
+		} else {
+			goto(resolveRoute('/[lang]', { lang: newLang }));
+		}
 	}
 
 	function toggleLangDropdown() {
@@ -37,7 +38,7 @@
 	<header class="border-b border-slate-200 bg-white/95 backdrop-blur sticky top-0 z-40 shadow-[0_4px_25px_rgba(59,130,246,0.05)]">
 		<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
 			<!-- Logo and Brand -->
-			<a href="/{i18n.current}" class="flex items-center gap-3 group">
+			<a href={resolveRoute('/[lang]', { lang: i18n.current })} class="flex items-center gap-3 group">
 				<div class="bg-blue-600 p-2 rounded-xl text-white shadow-[0_0_15px_rgba(37,99,235,0.4)] group-hover:shadow-[0_0_20px_rgba(37,99,235,0.6)] transition duration-300">
 					<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
 						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
@@ -116,7 +117,7 @@
 	</header>
 
 	<!-- Main Page Container -->
-	<main class="flex-grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+	<main class="grow w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 		{@render children()}
 	</main>
 
