@@ -2,7 +2,7 @@
 
 A premium, open-source, multi-module document utilities platform built with Svelte 5 and Tailwind CSS v4. Designed for speed, SEO excellence, and 100% private client-side file processing.
 
-[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
+
 [![Built with Svelte 5](https://img.shields.io/badge/Svelte-5-orange.svg?style=flat&logo=svelte)](https://svelte.dev)
 [![Styled with Tailwind v4](https://img.shields.io/badge/Tailwind_CSS-v4-38bdf8.svg?style=flat&logo=tailwindcss)](https://tailwindcss.com)
 [![Package Manager: Bun](https://img.shields.io/badge/Package_Manager-Bun-fbf0e9.svg?style=flat&logo=bun)](https://bun.sh)
@@ -86,8 +86,4 @@ We are designing PDFTools to grow into an open-source hub of document utilities.
 
 ---
 
-## ✍️ Authors & License
 
-Made with 💖 by [@khuirul_huda](https://github.com/khuirulhuda).
-
-This project is open-source software licensed under the **GNU General Public License v3.0 (GPL-3.0)**. Feel free to use, modify, and distribute it.
