@@ -16,7 +16,7 @@ export const id = {
 		enLocaleName: 'English',
 		comingSoon: 'Segera Hadir',
 		privacyBadge: '100% Lokal & Aman',
-		madeBy: 'dibuat oleh'
+		madeBy: 'Made with'
 	},
 	dashboard: {
 		heroTitle: 'Alat Dokumen Aman, Cepat, & Lokal',
