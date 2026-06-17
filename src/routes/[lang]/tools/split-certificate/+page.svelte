@@ -539,55 +539,27 @@
 						</span>
 					</div>
 
-					<!-- DYNAMIC CERTIFICATE CARD PREVIEW MOCKUP -->
-					<div class="border border-slate-200/80 bg-white shadow-sm rounded-xl overflow-hidden">
-						<!-- Mockup Header -->
-						<div class="px-4 py-2.5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between text-[10px] font-extrabold text-slate-400 uppercase tracking-widest">
-							<span>{i18n.t('tools.splitPdf.certificatePreviewTitle')}</span>
+					<!-- Live Match Simulator -->
+					<div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4.5 flex items-center justify-between shadow-inner">
+						<div class="space-y-1 pr-2 truncate">
+							<span class="text-[10px] uppercase tracking-wider font-extrabold text-slate-450">
+								{i18n.t('tools.splitPdf.livePreviewTitle', { page: currentPreviewPage })}
+							</span>
 							{#if currentPreviewName}
-								<span class="px-2 py-0.5 rounded-md bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1.5">
-									<span class="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
-									Active
-								</span>
+								<div class="text-sm font-extrabold text-blue-700 italic truncate font-title mt-0.5">
+									"{currentPreviewName}"
+								</div>
+							{:else}
+								<div class="text-xs font-bold text-slate-400 italic mt-0.5">
+									{i18n.t('tools.splitPdf.livePreviewPlaceholder')}
+								</div>
 							{/if}
 						</div>
-						
-						<!-- Mockup Certificate Body -->
-						<div class="p-6 bg-amber-50/5 relative flex flex-col items-center justify-center min-h-[160px] border-b border-slate-50">
-							<!-- Decorative borders -->
-							<div class="absolute inset-3 border border-amber-600/15 rounded-lg pointer-events-none"></div>
-							<div class="absolute inset-4.5 border-2 border-amber-600/5 rounded pointer-events-none"></div>
-							
-							<!-- Watermark Seal -->
-							<div class="absolute w-24 h-24 rounded-full border border-amber-500/10 flex items-center justify-center opacity-10 pointer-events-none select-none">
-								<svg class="w-16 h-16 text-amber-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-								</svg>
-							</div>
-
-							<!-- Content text content -->
-							<div class="text-center space-y-1.5 z-10 select-none">
-								<p class="text-[9px] uppercase font-bold tracking-widest text-amber-700/80">Certificate of Appreciation</p>
-								<p class="text-[8px] font-semibold text-slate-400 italic">is hereby presented to</p>
-								
-								<!-- Recipient Name -->
-								{#if currentPreviewName}
-									<div class="py-1.5 px-4 text-center">
-										<span class="text-lg sm:text-xl font-extrabold text-slate-800 font-title tracking-wide border-b border-amber-500/40 pb-0.5 inline-block">
-											{currentPreviewName}
-										</span>
-									</div>
-								{:else}
-									<div class="py-1 px-4 text-center">
-										<span class="text-xs font-bold text-slate-300 italic">
-											({i18n.t('tools.splitPdf.livePreviewPlaceholder')})
-										</span>
-									</div>
-								{/if}
-								
-								<p class="text-[7px] text-slate-400 font-medium">for successfully completing the document processing execution</p>
-							</div>
-						</div>
+						{#if currentPreviewName}
+							<span class="shrink-0 px-2.5 py-1 text-[10px] rounded-lg bg-blue-600 text-white font-mono font-bold border border-blue-500 shadow-glow-blue animate-pulse">
+								{i18n.t('tools.splitPdf.matchBadge')}
+							</span>
+						{/if}
 					</div>
 				</div>
 
