@@ -1,3 +1,67 @@
 @import 'tailwindcss';
 @plugin '@tailwindcss/forms';
 @plugin '@tailwindcss/typography';
+
+@theme {
+	--font-sans: 'Plus Jakarta Sans', sans-serif;
+	--font-title: 'Quicksand', sans-serif;
+
+	/* Custom premium glows */
+	--shadow-glow-blue: 0 0 15px rgba(37, 99, 235, 0.25);
+	--shadow-glow-blue-lg: 0 0 25px rgba(37, 99, 235, 0.4);
+	--shadow-glow-yellow: 0 0 15px rgba(245, 158, 11, 0.25);
+	--shadow-glow-yellow-lg: 0 0 25px rgba(245, 158, 11, 0.4);
+	--shadow-glow-button: 0 4px 20px rgba(37, 99, 235, 0.25);
+}
+
+body {
+	background-color: #fafbfd;
+	color: #0f172a;
+	font-family: var(--font-sans);
+}
+
+/* Custom premium scrollbars */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: #cbd5e1;
+	border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: #94a3b8;
+}
+
+/* Elegant dot-grid pattern for workspace canvas and panels */
+.bg-dot-grid {
+	background-size: 20px 20px;
+	background-image: radial-gradient(circle, #e2e8f0 1.2px, transparent 1.2px);
+}
+
+.bg-dot-grid-dark {
+	background-size: 20px 20px;
+	background-image: radial-gradient(circle, #1e293b 1.2px, transparent 1.2px);
+}
+
+/* Micro animations */
+@keyframes pulse-glow-blue {
+	0%, 100% { box-shadow: 0 0 15px rgba(37, 99, 235, 0.25); }
+	50% { box-shadow: 0 0 25px rgba(37, 99, 235, 0.45); }
+}
+
+@keyframes pulse-glow-yellow {
+	0%, 100% { box-shadow: 0 0 15px rgba(245, 158, 11, 0.25); }
+	50% { box-shadow: 0 0 25px rgba(245, 158, 11, 0.45); }
+}
+
+.animate-pulse-glow-blue {
+	animation: pulse-glow-blue 2s infinite ease-in-out;
+}
+
+.animate-pulse-glow-yellow {
+	animation: pulse-glow-yellow 2s infinite ease-in-out;
+}
