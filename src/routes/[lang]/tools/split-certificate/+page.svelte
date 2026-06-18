@@ -4,6 +4,7 @@
 	import { resolveRoute } from '$app/paths';
 	import { toast } from '$lib/components/toast.svelte';
 	import Seo from '$lib/components/Seo.svelte';
+	import { Info, FileText, Eye, Download, X } from '@lucide/svelte';
 
 	// Svelte 5 & TypeScript specific interfaces for typing libraries safely without using 'any'
 	interface PdfJsTextItem {
@@ -75,6 +76,17 @@
 	let isProcessing = $state(false);
 	let progressCurrent = $state(0);
 	let progressPercent = $state(0);
+	let downloadZipUrl = $state('');
+	let downloadZipName = $state('');
+	let lastExtractedFile = $state('');
+	
+	// Individual generated split files
+	interface GeneratedFile {
+		name: string;
+		url: string;
+	}
+	let generatedFiles = $state<GeneratedFile[]>([]);
+	let previewModalFile = $state<GeneratedFile | null>(null);
 	
 	// Canvas Render & Zoom State
 	let canvasElement: HTMLCanvasElement | null = $state(null);
@@ -173,8 +185,63 @@
 			addLog(i18n.t('tools.splitPdf.logs.loaded', { total: totalPages }), 'success');
 			stepParsePdf = 'success';
 
-			await loadPageText(1);
-			guessInitialTarget();
+			await loadPageText(1, false);
+			let autoDetected = false;
+			if (totalPages > 1) {
+				addLog('Analyzing document layout to auto-detect recipient name row...', 'info');
+				try {
+					const pagesToCompare = Math.min(10, totalPages);
+					// Load text for compared pages
+					for (let p = 1; p <= pagesToCompare; p++) {
+						await loadPageText(p, false);
+					}
+
+					// Collect page lines and find min lines count
+					const pagesLines: string[][] = [];
+					let minLinesCount = Infinity;
+					for (let p = 1; p <= pagesToCompare; p++) {
+						const lines = pageLinesCache[p] || [];
+						pagesLines.push(lines);
+						if (lines.length < minLinesCount) {
+							minLinesCount = lines.length;
+						}
+					}
+
+					// Find the row index with the highest unique value count (highest diversity)
+					let bestIndex = -1;
+					let maxUniqueCount = 1;
+					if (minLinesCount !== Infinity) {
+						for (let i = 0; i < minLinesCount; i++) {
+							const uniqueVals = new Set<string>();
+							for (let p = 0; p < pagesToCompare; p++) {
+								const txt = pagesLines[p][i].trim();
+								if (txt.length > 0) {
+									uniqueVals.add(txt.toLowerCase());
+								}
+							}
+							if (uniqueVals.size > maxUniqueCount) {
+								maxUniqueCount = uniqueVals.size;
+								bestIndex = i;
+							}
+						}
+					}
+
+					if (bestIndex !== -1 && maxUniqueCount > 1) {
+						selectLine(bestIndex);
+						autoDetected = true;
+						const sampleText = pagesLines[0][bestIndex].trim();
+						addLog(i18n.current === 'id' 
+							? `Sistem mendeteksi nama otomatis di Baris #${bestIndex + 1} ("${sampleText}") dengan variasi teks tertinggi (${maxUniqueCount} teks unik dari ${pagesToCompare} halaman).`
+							: `Auto-detected recipient name row at Row #${bestIndex + 1} ("${sampleText}") with highest text variation: ${maxUniqueCount} unique values across ${pagesToCompare} pages.`, 'success');
+					}
+				} catch (err) {
+					console.error("Auto-detect failed:", err);
+				}
+			}
+
+			if (!autoDetected) {
+				guessInitialTarget();
+			}
 		} catch (err) {
 			console.error("Error parsing file:", err);
 			addLog(i18n.t('tools.splitPdf.logs.failed', { error: (err as Error).message }), 'error');
@@ -198,17 +265,29 @@
 		stepParsePdf = 'pending';
 		stepExtractNames = 'pending';
 		stepPackageZip = 'pending';
+		if (downloadZipUrl) {
+			URL.revokeObjectURL(downloadZipUrl);
+		}
+		downloadZipUrl = '';
+		downloadZipName = '';
+		lastExtractedFile = '';
+		
+		// Clean up generated files URLs
+		generatedFiles.forEach(f => URL.revokeObjectURL(f.url));
+		generatedFiles = [];
+		previewModalFile = null;
+
 		addLog('Document closed. Ready for next file.');
 	}
 
 	// Load page text & update inspector list
-	async function loadPageText(pageNum: number) {
+	async function loadPageText(pageNum: number, showLoader = true) {
 		if (!globalPdfJsDoc) return;
-		isParsingText = true;
+		if (showLoader) isParsingText = true;
 
 		try {
 			if (pageLinesCache[pageNum]) {
-				isParsingText = false;
+				if (showLoader) isParsingText = false;
 				return;
 			}
 
@@ -225,7 +304,7 @@
 			console.error("Error loading page text:", err);
 			addLog(`Failed to extract page ${pageNum} text: ${(err as Error).message}`, 'error');
 		} finally {
-			isParsingText = false;
+			if (showLoader) isParsingText = false;
 		}
 	}
 
@@ -318,7 +397,7 @@
 
 	// Extract recipient name helper
 	async function extractNameFromPage(pageNum: number): Promise<string> {
-		await loadPageText(pageNum);
+		await loadPageText(pageNum, false);
 		const lines = pageLinesCache[pageNum] || [];
 		if (lines.length === 0) return `Page_${pageNum}`;
 
@@ -357,6 +436,10 @@
 		addLog(i18n.t('tools.splitPdf.logs.start', { total: totalPages }));
 
 		try {
+			// Clean up previous generated file URLs
+			generatedFiles.forEach(f => URL.revokeObjectURL(f.url));
+			generatedFiles = [];
+
 			const zip = new JSZip();
 
 			for (let i = 0; i < totalPages; i++) {
@@ -373,7 +456,15 @@
 				const filename = `${cleanName}.pdf`;
 				zip.file(filename, subPdfBytes);
 
+				const pdfBlob = new Blob([subPdfBytes] as any[], { type: 'application/pdf' });
+				const pdfUrl = URL.createObjectURL(pdfBlob);
+				generatedFiles.push({
+					name: filename,
+					url: pdfUrl
+				});
+
 				addLog(i18n.t('tools.splitPdf.logs.extracted', { page: pageNum, total: totalPages, filename }), 'info');
+				lastExtractedFile = filename;
 				progressCurrent = pageNum;
 				progressPercent = Math.round((pageNum / totalPages) * 100);
 
@@ -388,15 +479,22 @@
 			const zipBlob = await zip.generateAsync({ type: 'blob' });
 			const zipName = fileName.replace('.pdf', '_Split.zip');
 
+			// Revoke previous URL if any
+			if (downloadZipUrl) {
+				URL.revokeObjectURL(downloadZipUrl);
+			}
+
+			// Save to states
+			downloadZipUrl = URL.createObjectURL(zipBlob);
+			downloadZipName = zipName;
+
 			// Trigger local download
-			const downloadUrl = URL.createObjectURL(zipBlob);
 			const downloadLink = document.createElement('a');
-			downloadLink.href = downloadUrl;
-			downloadLink.download = zipName;
+			downloadLink.href = downloadZipUrl;
+			downloadLink.download = downloadZipName;
 			document.body.appendChild(downloadLink);
 			downloadLink.click();
 			document.body.removeChild(downloadLink);
-			URL.revokeObjectURL(downloadUrl);
 
 			addLog(i18n.t('tools.splitPdf.logs.completed', { name: zipName }), 'success');
 			stepPackageZip = 'success';
@@ -435,6 +533,40 @@
 	function resetZoom() {
 		canvasZoom = 100;
 	}
+
+	// Action for auto-scrolling the selected text line into view
+	function scrollIntoViewIfSelected(node: HTMLElement, isSelected: boolean) {
+		if (isSelected) {
+			node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+		}
+		return {
+			update(newIsSelected: boolean) {
+				if (newIsSelected) {
+					node.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+				}
+			}
+		};
+	}
+
+	// Generate up to 5 preview filenames based on the selected row
+	let previewFilenames = $derived.by(() => {
+		if (!globalPdfJsDoc || selectedLineIndex === -1) return [];
+		const list: { page: number; filename: string }[] = [];
+		const count = Math.min(5, totalPages);
+		for (let p = 1; p <= count; p++) {
+			const lines = pageLinesCache[p];
+			if (lines && selectedLineIndex < lines.length) {
+				let name = lines[selectedLineIndex].trim();
+				if (name.startsWith(':') || name.startsWith('-')) {
+					name = name.substring(1).trim();
+				}
+				list.push({ page: p, filename: `${sanitizeFilename(name)}.pdf` });
+			} else {
+				list.push({ page: p, filename: `Page_${p}.pdf` });
+			}
+		}
+		return list;
+	});
 </script>
 
 <Seo 
@@ -470,9 +602,9 @@
 		<!-- Main Workspace Grid -->
 		<div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
 			<!-- LEFT COLUMN: Configurations & Processing steps (7-col) -->
-			<div class="lg:col-span-7 space-y-6">
+			<div class="contents lg:block lg:col-span-7 lg:space-y-6">
 				<!-- Card 1: File Upload & Details -->
-				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5">
+				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 order-1 lg:order-none">
 					<h3 class="text-base font-bold mb-4 text-slate-900 flex items-center gap-2.5 font-title">
 						<span class="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 text-xs font-bold shadow-sm">
 							{i18n.t('tools.splitPdf.step1')}
@@ -481,8 +613,15 @@
 					</h3>
 
 					{#if fileName}
-						<!-- Display loaded file specs details -->
-						<div class="border border-blue-200/80 bg-blue-50/10 rounded-xl p-4.5 space-y-4 shadow-sm relative overflow-hidden">
+						<!-- Display loaded file specs details, with drop replacement support -->
+						<div 
+							role="presentation"
+							ondragover={(e) => { e.preventDefault(); isDragging = true; }}
+							ondragleave={() => { isDragging = false; }}
+							ondrop={(e) => { e.preventDefault(); isDragging = false; if (e.dataTransfer) handleFileSelect(e.dataTransfer.files); }}
+							class="border border-blue-200/80 bg-blue-50/10 rounded-xl p-4.5 space-y-4 shadow-sm relative overflow-hidden transition-all duration-300
+							{isDragging ? 'bg-blue-100/30 border-blue-400 shadow-glow-blue-sm' : ''}"
+						>
 							<div class="absolute top-0 right-0 w-32 h-32 bg-blue-500/5 rounded-full blur-2xl pointer-events-none"></div>
 							
 							<div class="flex items-start justify-between gap-4">
@@ -501,7 +640,7 @@
 								<button 
 									onclick={removeUploadedFile}
 									type="button" 
-									class="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg border border-transparent hover:border-red-200 transition shadow-sm"
+									class="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg border border-transparent hover:border-red-200 transition shadow-sm z-10"
 									title="Remove File"
 								>
 									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -557,24 +696,26 @@
 					{/if}
 				</div>
 
-				<!-- Card 2: Recognition Rules config -->
-				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 space-y-5">
+				<!-- Card 2: Extracted Filenames Preview configuration -->
+				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 space-y-5 order-3 lg:order-none">
 					<h3 class="text-base font-bold text-slate-900 flex items-center gap-2.5 font-title">
 						<span class="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 text-xs font-bold shadow-sm">
-							{i18n.t('tools.splitPdf.step2')}
+							3
 						</span>
 						{i18n.t('tools.splitPdf.step2Title')}
 					</h3>
 
-					<div class="bg-blue-50/40 border border-blue-100/60 rounded-xl p-4 text-xs text-slate-700 space-y-2.5 leading-relaxed shadow-sm">
-						<p class="font-bold text-slate-950 flex items-center gap-1.5">
-							<span class="text-blue-600">💡</span> {i18n.t('tools.splitPdf.step2InstructionTitle')}
+					<!-- Comprehensive Tutorial Box -->
+					<div class="bg-blue-50/45 border border-blue-100/80 rounded-xl p-4 space-y-2 text-xs text-slate-650 leading-relaxed shadow-sm">
+						<h4 class="font-extrabold text-blue-805 flex items-center gap-1.5 font-title">
+							<Info class="w-4 h-4 text-blue-600 shrink-0" />
+							{i18n.current === 'id' ? 'Panduan' : 'Quick Guide'}
+						</h4>
+						<p class="font-semibold text-slate-600">
+							{i18n.current === 'id' 
+								? 'Sistem mendeteksi baris nama peserta secara otomatis. Jika salah, silakan klik baris nama yang benar di panel inspektur.' 
+								: 'We automatically detect the recipient name row. If incorrect, simply click the correct line in the inspector panel.'}
 						</p>
-						<ol class="list-decimal pl-4.5 space-y-1.5 text-slate-600 font-semibold">
-						{#each i18n.tArray('tools.splitPdf.step2Instructions') as instruction, i (i)}
-							<li>{instruction}</li>
-						{/each}
-						</ol>
 					</div>
 
 					<!-- Selection index display -->
@@ -591,127 +732,316 @@
 						</span>
 					</div>
 
-					<!-- Live Match Simulator -->
-					<div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4.5 flex items-center justify-between shadow-inner">
-						<div class="space-y-1 pr-2 truncate">
+					<!-- Filename Previews (Up to 5 Pages) -->
+					<div class="bg-slate-50 border border-slate-200/80 rounded-xl p-4.5 shadow-inner space-y-3">
+						<div class="flex items-center justify-between">
 							<span class="text-[10px] uppercase tracking-wider font-extrabold text-slate-450">
-								{i18n.t('tools.splitPdf.livePreviewTitle', { page: currentPreviewPage })}
+								{i18n.current === 'id' ? 'Hasil Pratinjau Nama File (Hal 1-5)' : 'File Name Previews (Pages 1-5)'}
 							</span>
-							{#if currentPreviewName}
-								<div class="text-sm font-extrabold text-blue-700 italic truncate font-title mt-0.5">
-									"{currentPreviewName}"
-								</div>
-							{:else}
-								<div class="text-xs font-bold text-slate-400 italic mt-0.5">
-									{i18n.t('tools.splitPdf.livePreviewPlaceholder')}
-								</div>
-							{/if}
 						</div>
-						{#if currentPreviewName}
-							<span class="shrink-0 px-2.5 py-1 text-[10px] rounded-lg bg-blue-600 text-white font-mono font-bold border border-blue-500 shadow-glow-blue animate-pulse">
-								{i18n.t('tools.splitPdf.matchBadge')}
-							</span>
+
+						{#if previewFilenames.length > 0}
+							<div class="grid grid-cols-1 gap-2.5">
+								{#each previewFilenames as item}
+									<div class="flex items-center gap-3.5 bg-white border border-blue-50/60 hover:border-blue-200 rounded-xl p-3 shadow-xs hover:shadow-sm transition-all duration-300">
+										<div class="w-7 h-7 rounded-lg bg-rose-50 border border-rose-100/80 text-rose-650 flex items-center justify-center font-mono font-black text-[10px] shrink-0" title="Page {item.page}">
+											{item.page}
+										</div>
+										<div class="min-w-0 flex-1">
+											<p class="text-xs font-bold text-slate-800 truncate leading-snug">
+												{item.filename}
+											</p>
+										</div>
+									</div>
+								{/each}
+							</div>
+						{:else}
+							<div class="text-xs font-bold text-slate-450 italic text-center py-4">
+								{i18n.t('tools.splitPdf.livePreviewPlaceholder')}
+							</div>
 						{/if}
 					</div>
 				</div>
 
 				<!-- Card 3: Execution progress step panel -->
-				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 space-y-5">
+				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 space-y-5 order-4 lg:order-none">
 					<h3 class="text-base font-bold text-slate-900 flex items-center gap-2.5 font-title">
 						<span class="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 text-xs font-bold shadow-sm">
-							{i18n.t('tools.splitPdf.step3')}
+							4
 						</span>
 						{i18n.t('tools.splitPdf.step3Title')}
 					</h3>
 
-					<!-- Progress Checklist -->
+					<!-- Progress Timeline Stepper -->
 					{#if globalPdfLibDoc}
-						<div class="border border-slate-200/80 rounded-xl p-4 bg-slate-50/50 space-y-3.5 text-xs font-bold shadow-inner">
-							<div class="flex items-center justify-between">
-								<span class="flex items-center gap-2 text-slate-700">
-									{#if stepParsePdf === 'success'}
-										<span class="text-blue-600 font-extrabold text-sm">✓</span>
-									{:else}
-										<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-									{/if}
-									{i18n.t('tools.splitPdf.checklistParse')}
-								</span>
-								<span class="text-slate-400 capitalize">{stepParsePdf}</span>
-							</div>
+						<div class="border border-slate-200/60 rounded-xl p-5 bg-slate-50/30 shadow-inner">
+							<div class="relative pl-6 space-y-5 before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200/80">
+								<!-- Step 1: Parse PDF -->
+								<div class="relative flex items-center justify-between text-xs font-bold animate-fade-in">
+									<div class="flex items-center gap-3">
+										<div class="absolute -left-6 w-6 h-6 flex items-center justify-center rounded-full border-2 transition-all duration-300
+											{stepParsePdf === 'success' ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm' : ''}
+											{stepParsePdf === 'running' ? 'bg-white border-blue-600 text-blue-600 shadow-glow-blue animate-pulse' : ''}
+											{stepParsePdf === 'pending' ? 'bg-white border-slate-300 text-slate-450' : ''}
+											{stepParsePdf === 'error' ? 'bg-rose-500 border-rose-500 text-white' : ''}"
+										>
+											{#if stepParsePdf === 'success'}
+												<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+												</svg>
+											{:else if stepParsePdf === 'running'}
+												<span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping"></span>
+											{:else if stepParsePdf === 'error'}
+												<span class="text-[10px] font-extrabold">!</span>
+											{:else}
+												<span class="text-[9px] text-slate-400">1</span>
+											{/if}
+										</div>
+										<span class="{stepParsePdf === 'success' ? 'text-slate-800' : 'text-slate-600'} transition-colors duration-300">
+											{i18n.t('tools.splitPdf.checklistParse')}
+										</span>
+									</div>
+									<span class="text-[10px] font-bold uppercase tracking-wider transition-colors duration-300
+										{stepParsePdf === 'success' ? 'text-emerald-600' : ''}
+										{stepParsePdf === 'running' ? 'text-blue-600 animate-pulse' : ''}
+										{stepParsePdf === 'pending' ? 'text-slate-400' : ''}
+										{stepParsePdf === 'error' ? 'text-rose-600 font-extrabold' : ''}"
+									>
+										{stepParsePdf}
+									</span>
+								</div>
 
-							<div class="flex items-center justify-between">
-								<span class="flex items-center gap-2 text-slate-700">
-									{#if stepExtractNames === 'success'}
-										<span class="text-blue-600 font-extrabold text-sm">✓</span>
-									{:else if stepExtractNames === 'running'}
-										<span class="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
-									{:else}
-										<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
-									{/if}
-									{i18n.t('tools.splitPdf.checklistSplit')}
-								</span>
-								<span class="text-slate-400 capitalize">{stepExtractNames}</span>
-							</div>
+								<!-- Step 2: Extract Names & Split -->
+								<div class="relative space-y-2 animate-fade-in">
+									<div class="flex items-center justify-between text-xs font-bold">
+										<div class="flex items-center gap-3">
+											<div class="absolute -left-6 w-6 h-6 flex items-center justify-center rounded-full border-2 transition-all duration-300
+												{stepExtractNames === 'success' ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm' : ''}
+												{stepExtractNames === 'running' ? 'bg-white border-blue-600 text-blue-600 shadow-glow-blue animate-pulse' : ''}
+												{stepExtractNames === 'pending' ? 'bg-white border-slate-300 text-slate-450' : ''}
+												{stepExtractNames === 'error' ? 'bg-rose-500 border-rose-500 text-white' : ''}"
+											>
+												{#if stepExtractNames === 'success'}
+													<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+													</svg>
+												{:else if stepExtractNames === 'running'}
+													<span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping"></span>
+												{:else if stepExtractNames === 'error'}
+													<span class="text-[10px] font-extrabold">!</span>
+												{:else}
+													<span class="text-[9px] text-slate-400">2</span>
+												{/if}
+											</div>
+											<span class="{stepExtractNames === 'success' ? 'text-slate-800' : 'text-slate-600'} transition-colors duration-300">
+												{i18n.t('tools.splitPdf.checklistSplit')}
+											</span>
+										</div>
+										<span class="text-[10px] font-bold uppercase tracking-wider transition-colors duration-300
+											{stepExtractNames === 'success' ? 'text-emerald-600' : ''}
+											{stepExtractNames === 'running' ? 'text-blue-600 animate-pulse' : ''}
+											{stepExtractNames === 'pending' ? 'text-slate-400' : ''}
+											{stepExtractNames === 'error' ? 'text-rose-600 font-extrabold' : ''}"
+										>
+											{stepExtractNames}
+										</span>
+									</div>
 
-							<div class="flex items-center justify-between">
-								<span class="flex items-center gap-2 text-slate-700">
-									{#if stepPackageZip === 'success'}
-										<span class="text-blue-600 font-extrabold text-sm">✓</span>
-									{:else if stepPackageZip === 'running'}
-										<span class="w-3.5 h-3.5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></span>
-									{:else}
-										<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span>
+									<!-- Nested Progress Bar inside Step 2 while running -->
+									{#if stepExtractNames === 'running'}
+										<div class="mt-2.5 pl-0.5 space-y-2 max-w-md animate-fade-in">
+											<div class="flex justify-between text-[10px] font-bold text-slate-500">
+												<span class="flex items-center gap-1.5">
+													<svg class="animate-spin h-3.5 w-3.5 text-blue-600 animate-duration-1200" fill="none" viewBox="0 0 24 24">
+														<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+														<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+													</svg>
+													<span>{progressCurrent} / {totalPages} {i18n.current === 'id' ? 'Halaman' : 'Pages'}</span>
+												</span>
+												<span class="text-blue-650 font-mono font-extrabold">{progressPercent}%</span>
+											</div>
+											<div class="w-full bg-slate-200/70 border border-slate-350/20 rounded-full h-2 overflow-hidden shadow-inner">
+												<div class="bg-blue-600 h-2 rounded-full transition-all duration-300 shadow-glow-blue" style="width: {progressPercent}%"></div>
+											</div>
+											{#if lastExtractedFile}
+												<div class="text-[9.5px] text-slate-500 truncate flex items-center gap-1 mt-1 font-semibold animate-fade-in">
+													<span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0"></span>
+													<span>{i18n.current === 'id' ? 'Memproses:' : 'Processing:'} <span class="font-mono text-slate-700 font-bold">{lastExtractedFile}</span></span>
+												</div>
+											{/if}
+										</div>
 									{/if}
-									{i18n.t('tools.splitPdf.checklistZip')}
-								</span>
-								<span class="text-slate-400 capitalize">{stepPackageZip}</span>
+								</div>
+
+								<!-- Step 3: Package & Download Zip -->
+								<div class="relative space-y-2 animate-fade-in">
+									<div class="flex items-center justify-between text-xs font-bold">
+										<div class="flex items-center gap-3">
+											<div class="absolute -left-6 w-6 h-6 flex items-center justify-center rounded-full border-2 transition-all duration-300
+												{stepPackageZip === 'success' ? 'bg-emerald-500 border-emerald-500 text-white shadow-sm' : ''}
+												{stepPackageZip === 'running' ? 'bg-white border-blue-600 text-blue-600 shadow-glow-blue animate-pulse' : ''}
+												{stepPackageZip === 'pending' ? 'bg-white border-slate-300 text-slate-450' : ''}
+												{stepPackageZip === 'error' ? 'bg-rose-500 border-rose-500 text-white' : ''}"
+											>
+												{#if stepPackageZip === 'success'}
+													<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+													</svg>
+												{:else if stepPackageZip === 'running'}
+													<span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping"></span>
+												{:else if stepPackageZip === 'error'}
+													<span class="text-[10px] font-extrabold">!</span>
+												{:else}
+													<span class="text-[9px] text-slate-400">3</span>
+												{/if}
+											</div>
+											<span class="{stepPackageZip === 'success' ? 'text-slate-800' : 'text-slate-600'} transition-colors duration-300">
+												{i18n.t('tools.splitPdf.checklistZip')}
+											</span>
+										</div>
+										<span class="text-[10px] font-bold uppercase tracking-wider transition-colors duration-300
+											{stepPackageZip === 'success' ? 'text-emerald-600' : ''}
+											{stepPackageZip === 'running' ? 'text-blue-600 animate-pulse' : ''}
+											{stepPackageZip === 'pending' ? 'text-slate-400' : ''}
+											{stepPackageZip === 'error' ? 'text-rose-600 font-extrabold' : ''}"
+										>
+											{stepPackageZip}
+										</span>
+									</div>
+
+									<!-- Nested Status Loader for Step 3 zipping while running -->
+									{#if stepPackageZip === 'running'}
+										<div class="mt-2 pl-0.5 max-w-md flex items-center gap-2 text-[9px] text-slate-500 font-semibold italic animate-pulse">
+											<span class="w-2.5 h-2.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></span>
+											{i18n.current === 'id' ? 'Mengompresi file ke ZIP...' : 'Compressing files to ZIP...'}
+										</div>
+									{/if}
+								</div>
 							</div>
 						</div>
 					{/if}
 
-					<!-- Main Progress Bar -->
-					{#if isProcessing}
-						<div class="space-y-2.5 bg-slate-50 border border-slate-200/80 p-4 rounded-xl shadow-inner border-l-4 border-l-blue-600 shadow-blue-500/5">
-							<div class="flex justify-between text-xs font-bold text-slate-700">
-								<span class="flex items-center gap-2">
-									<svg class="animate-spin h-4 w-4 text-blue-600" fill="none" viewBox="0 0 24 24">
-										<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-										<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+					{#if stepPackageZip === 'success' && downloadZipUrl}
+						<div class="bg-emerald-50/40 border border-emerald-200 rounded-xl p-5 text-center space-y-4 shadow-xs animate-fade-in">
+							<div class="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-md shadow-emerald-500/10">
+								<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
+								</svg>
+							</div>
+							<div class="space-y-1">
+								<p class="text-sm font-extrabold text-slate-900">{i18n.current === 'id' ? 'Pemisahan PDF Selesai!' : 'Splitting Completed!'}</p>
+								<p class="text-xs font-semibold text-slate-500 leading-relaxed max-w-[260px] mx-auto">
+									{i18n.current === 'id' 
+										? `Berhasil memisahkan ${totalPages} sertifikat ke dalam satu file ZIP.` 
+										: `Successfully split ${totalPages} certificates into a ZIP archive.`}
+								</p>
+							</div>
+
+							<!-- Display mock ZIP file block -->
+							<div class="bg-white border border-slate-200/80 rounded-xl p-3 shadow-xs flex items-center gap-3 max-w-xs mx-auto text-left hover:border-emerald-300 transition-colors duration-300">
+								<div class="p-2 bg-emerald-50 text-emerald-600 rounded-lg shrink-0 border border-emerald-100">
+									<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
 									</svg>
-									{i18n.t('tools.splitPdf.processingText', { current: progressCurrent, total: totalPages })}
-								</span>
-								<span class="text-blue-600 font-mono font-extrabold">{progressPercent}%</span>
+								</div>
+								<div class="min-w-0 flex-1">
+									<p class="text-xs font-bold text-slate-900 truncate leading-snug">
+										{downloadZipName}
+									</p>
+									<p class="text-[9px] font-bold text-slate-400 uppercase mt-0.5">
+										{fileSize} • {totalPages} Pages
+									</p>
+								</div>
 							</div>
-							<div class="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden shadow-inner">
-								<div class="bg-blue-600 h-2.5 rounded-full transition-all duration-300 shadow-glow-blue" style="width: {progressPercent}%"></div>
-							</div>
-						</div>
-					{/if}
 
-					<button
-						onclick={executePdfSplit}
-						disabled={isProcessing || !globalPdfLibDoc || selectedLineIndex === -1}
-						class="w-full py-4 px-6 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2 group transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
-						bg-blue-600 hover:bg-blue-500 shadow-glow-blue hover:shadow-glow-blue-lg active:scale-[0.99]"
-					>
-						<svg class="w-5 h-5 group-hover:translate-y-0.5 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-						</svg>
-						{i18n.t('tools.splitPdf.processBtn')}
-					</button>
+							<div class="grid grid-cols-2 gap-3 pt-2">
+								<a
+									href={downloadZipUrl}
+									download={downloadZipName}
+									class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm shadow-emerald-500/10 text-center flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
+								>
+									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+									</svg>
+									{i18n.current === 'id' ? 'Unduh Lagi' : 'Download Again'}
+								</a>
+								<button
+									onclick={removeUploadedFile}
+									type="button"
+									class="py-2.5 px-4 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 font-bold text-xs shadow-xs text-center transition active:scale-[0.98]"
+								>
+									{i18n.current === 'id' ? 'Proses File Baru' : 'New File'}
+								</button>
+							</div>
+
+							<!-- Individual Files Download/Preview Section -->
+							{#if generatedFiles.length > 0}
+								<div class="border-t border-slate-200/60 pt-4 text-left space-y-2.5">
+									<p class="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider">
+										{i18n.current === 'id' ? 'Unduh / Pratinjau File Individual' : 'Download / Preview Individual Files'}
+									</p>
+									<div class="max-h-[200px] overflow-y-auto space-y-2 pr-1 scrollbar-thin">
+										{#each generatedFiles as file, idx}
+											<div class="flex items-center justify-between gap-3 bg-white border border-slate-250/70 hover:border-blue-300 rounded-xl p-2.5 shadow-xs transition-colors duration-200">
+												<div class="flex items-center gap-2.5 min-w-0 flex-1">
+													<div class="w-6 h-6 rounded-lg bg-rose-50 text-rose-650 flex items-center justify-center font-mono font-black text-[9px] border border-rose-100/80 shrink-0">
+														{idx + 1}
+													</div>
+													<span class="text-xs font-bold text-slate-800 truncate" title={file.name}>
+														{file.name}
+													</span>
+												</div>
+												<div class="flex items-center gap-1.5 shrink-0">
+													<!-- Preview Button -->
+													<button
+														onclick={() => previewModalFile = file}
+														type="button"
+														class="p-1.5 bg-slate-55 hover:bg-blue-55 text-slate-500 hover:text-blue-600 border border-slate-200/70 hover:border-blue-200 rounded-lg transition flex items-center justify-center"
+														title={i18n.current === 'id' ? 'Pratinjau' : 'Preview'}
+													>
+														<Eye class="w-3.5 h-3.5" />
+													</button>
+													<!-- Download Button -->
+													<a
+														href={file.url}
+														download={file.name}
+														class="p-1.5 bg-slate-55 hover:bg-emerald-55 text-slate-500 hover:text-emerald-600 border border-slate-200/70 hover:border-emerald-200 rounded-lg transition flex items-center justify-center"
+														title={i18n.current === 'id' ? 'Unduh' : 'Download'}
+													>
+														<Download class="w-3.5 h-3.5" />
+													</a>
+												</div>
+											</div>
+										{/each}
+									</div>
+								</div>
+							{/if}
+						</div>
+					{:else}
+						<button
+							onclick={executePdfSplit}
+							disabled={isProcessing || !globalPdfLibDoc || selectedLineIndex === -1}
+							class="w-full py-4 px-6 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2 group transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
+							bg-blue-600 hover:bg-blue-500 shadow-glow-blue hover:shadow-glow-blue-lg active:scale-[0.99]"
+						>
+							<svg class="w-5 h-5 group-hover:translate-y-0.5 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+							</svg>
+							{i18n.t('tools.splitPdf.processBtn')}
+						</button>
+					{/if}
 				</div>
 			</div>
 
 			<!-- RIGHT COLUMN: Interactive Dual Inspector & System Logs (5-col) -->
-			<div class="lg:col-span-5 space-y-6">
+			<div class="contents lg:block lg:col-span-5 lg:space-y-6">
 				<!-- Card Panel Inspector (Sample PDF pages and texts) -->
-				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 flex flex-col h-[480px]">
+				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 flex flex-col h-[540px] order-2 lg:order-none">
 					<div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3 shrink-0">
 						<h3 class="text-xs font-extrabold uppercase tracking-widest text-slate-500 flex items-center gap-2 font-title">
-							<svg class="w-4 h-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-							</svg>
+							<span class="flex items-center justify-center w-5 h-5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold shadow-xs">
+								2
+							</span>
 							{i18n.t('tools.splitPdf.inspectorTitle')}
 						</h3>
 						
@@ -741,6 +1071,14 @@
 								</svg>
 							</button>
 						</div>
+					</div>
+
+					<!-- Tutorial Tip in Inspector -->
+					<div class="mb-4 bg-blue-50/40 border border-blue-100/60 rounded-xl p-3 text-[11px] text-slate-650 leading-relaxed shadow-sm shrink-0">
+						<span class="font-bold text-blue-700">💡 {i18n.current === 'id' ? 'Petunjuk Cepat:' : 'Quick Tutorial:'}</span>
+						{i18n.current === 'id'
+							? 'Pilih baris yang berisi nama peserta di bawah. Urutan baris ini akan diekstrak otomatis dari seluruh halaman untuk menamai file.'
+							: 'Select the line containing the recipient\'s name below. This line index will be used to extract names from all pages to rename each file.'}
 					</div>
 
 					<!-- Tab buttons -->
@@ -787,25 +1125,27 @@
 										{#each lines as line, index (index)}
 											{@const isSelected = selectedLineIndex === index}
 											<button
+												use:scrollIntoViewIfSelected={isSelected}
 												onclick={() => selectLine(index)}
 												type="button"
-												class="w-full text-left p-3.5 rounded-xl border flex items-center justify-between group transition-all duration-200
+												class="w-full text-left p-3.5 rounded-xl border flex items-center justify-between group transition-all duration-200 active:scale-[0.99]
 												{isSelected 
-													? 'bg-blue-50/60 text-blue-900 border-blue-300 shadow-sm' 
-													: 'bg-slate-50/50 hover:bg-slate-100/85 border-slate-200/60 text-slate-800'}"
+													? 'bg-blue-50/70 text-blue-950 border-blue-400 shadow-sm font-semibold' 
+													: 'bg-slate-50/40 hover:bg-slate-100/80 border-slate-200/65 hover:border-slate-350 text-slate-850 hover:text-slate-950'}"
 											>
 												<div class="flex items-center gap-3 truncate pr-2">
 													<span class="text-[10px] font-mono font-bold w-5.5 h-5.5 flex items-center justify-center rounded-lg shrink-0 transition-colors
-														{isSelected ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-200 text-slate-500'}"
+														{isSelected ? 'bg-blue-600 text-white shadow-sm' : 'bg-slate-200 text-slate-555'}"
 													>
 														{index + 1}
 													</span>
 													<span class="truncate font-bold text-xs leading-relaxed">{line}</span>
+
 												</div>
 												<span class="shrink-0 text-[10px] font-extrabold px-2.5 py-1 rounded-lg transition border shadow-sm
 													{isSelected 
 														? 'bg-blue-600 text-white border-blue-500' 
-														: 'bg-slate-200 text-slate-600 border-slate-300/40 group-hover:bg-slate-300/80'}"
+														: 'bg-slate-200 text-slate-650 border-slate-300/40 group-hover:bg-slate-300/80'}"
 												>
 													{isSelected ? i18n.t('tools.splitPdf.inspectorBtnSelected') : i18n.t('tools.splitPdf.inspectorBtnSelect')}
 												</span>
@@ -864,45 +1204,6 @@
 					</div>
 				</div>
 
-				<!-- Card Panel Terminal Logs -->
-				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 flex flex-col h-[280px]">
-					<div class="flex items-center justify-between mb-3 border-b border-slate-100 pb-3 shrink-0">
-						<h3 class="text-xs font-extrabold uppercase tracking-widest text-slate-500 flex items-center gap-2 font-title">
-							<svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-							</svg>
-							{i18n.t('tools.splitPdf.terminalTitle')}
-						</h3>
-						<button
-							onclick={clearLogs}
-							class="text-[10px] text-slate-450 hover:text-blue-600 transition font-bold"
-						>
-							{i18n.t('tools.splitPdf.clearLogs')}
-						</button>
-					</div>
-
-					<div
-						id="log-terminal"
-						class="grow bg-slate-950 border border-slate-900 rounded-xl p-4 overflow-y-auto font-mono text-[10px] text-slate-350 select-text scrollbar-thin shadow-inner whitespace-pre-wrap space-y-1 relative"
-					>
-						<!-- Scanline overlay effect -->
-						<div class="absolute inset-0 bg-linear-to-b from-transparent to-black/10 pointer-events-none select-none"></div>
-						
-						{#each logs as log, i (i)}
-							<div class="leading-relaxed">
-								<span class="text-slate-500 select-none">[{log.time}]</span>
-								<span class="
-									{log.type === 'success' ? 'text-emerald-450 font-bold' : ''}
-									{log.type === 'error' ? 'text-amber-500 font-bold' : ''}
-									{log.type === 'warn' ? 'text-yellow-450' : ''}
-									{log.type === 'info' ? 'text-slate-300 font-semibold' : ''}"
-								>
-									{log.message}
-								</span>
-							</div>
-						{/each}
-					</div>
-				</div>
 			</div>
 		</div>
 
@@ -989,6 +1290,51 @@
 	</div>
 {/if}
 
+{#if previewModalFile}
+	<!-- Modal Overlay -->
+	<div class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-905/65 backdrop-blur-xs animate-fade-in" role="dialog" aria-modal="true">
+		<div class="bg-white border border-slate-200 rounded-2xl w-full max-w-4xl h-[85vh] flex flex-col shadow-2xl relative overflow-hidden">
+			<!-- Modal Header -->
+			<div class="flex items-center justify-between px-6 py-4 border-b border-slate-200/80 shrink-0">
+				<div class="flex items-center gap-2.5 min-w-0">
+					<div class="p-2 bg-rose-50 text-rose-600 rounded-lg border border-rose-100/80 shrink-0">
+						<FileText class="w-5 h-5 text-rose-600" />
+					</div>
+					<h3 class="text-sm font-extrabold text-slate-950 truncate leading-snug" title={previewModalFile.name}>
+						{previewModalFile.name}
+					</h3>
+				</div>
+				<div class="flex items-center gap-2">
+					<a
+						href={previewModalFile.url}
+						download={previewModalFile.name}
+						class="py-1.5 px-3 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-sm flex items-center gap-1.5 transition active:scale-[0.98]"
+					>
+						<Download class="w-3.5 h-3.5" />
+						{i18n.current === 'id' ? 'Unduh' : 'Download'}
+					</a>
+					<button
+						onclick={() => previewModalFile = null}
+						type="button"
+						class="p-2 hover:bg-slate-100 text-slate-400 hover:text-slate-600 rounded-lg transition"
+						title={i18n.current === 'id' ? 'Tutup' : 'Close'}
+					>
+						<X class="w-5 h-5" />
+					</button>
+				</div>
+			</div>
+			<!-- Modal Content (PDF viewer iframe) -->
+			<div class="grow bg-slate-100 p-2 relative">
+				<iframe
+					src={previewModalFile.url}
+					title={previewModalFile.name}
+					class="w-full h-full rounded-lg border border-slate-200/50 shadow-inner bg-white"
+				></iframe>
+			</div>
+		</div>
+	</div>
+{/if}
+
 <style>
 	/* Subtle helper animations */
 	@keyframes fadeIn {
@@ -999,11 +1345,4 @@
 		animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 	}
 	
-	/* Color code terminal logs */
-	.text-emerald-450 {
-		color: #10b981;
-	}
-	.text-yellow-450 {
-		color: #fbbf24;
-	}
 </style>
