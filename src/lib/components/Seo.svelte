@@ -14,6 +14,7 @@
 	let displayKeywords = $derived(keywords || i18n.t('meta.keywords'));
 	let url = $derived(canonicalUrl || page.url.href);
 
+	// eslint-disable-next-line @typescript-eslint/no-unused-vars
 	let schemaJson = $derived(JSON.stringify({
 		"@context": "https://schema.org",
 		"@type": "WebApplication",
@@ -50,6 +51,7 @@
 	<meta name="twitter:title" content={displayTitle} />
 	<meta name="twitter:description" content={displayDescription} />
 
-	<!-- JSON-LD Structured Data -->
-	{@html `<script type="application/ld+json">${schemaJson}</script>`}
+	<script type="application/ld+json">
+		{@html schemaJson}
+	</script>
 </svelte:head>

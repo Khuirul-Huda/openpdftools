@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
+	import { resolveRoute } from '$app/paths';
 
 	onMount(() => {
 		let lang = 'en';
@@ -16,7 +17,7 @@
 				}
 			}
 		}
-		goto(`/${lang}`, { replaceState: true });
+		goto(resolveRoute('/[lang]', { lang }), { replaceState: true });
 	});
 </script>
 

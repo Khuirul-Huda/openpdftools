@@ -2,7 +2,7 @@ export class ToastManager {
 	message = $state('');
 	type = $state<'success' | 'error'>('success');
 	visible = $state(false);
-	timer: any = null;
+	timer: ReturnType<typeof setTimeout> | null = null;
 
 	show(message: string, type: 'success' | 'error' = 'success') {
 		this.message = message;

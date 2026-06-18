@@ -1,10 +1,18 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { SvelteSet } from 'svelte/reactivity';
 	import { i18n } from '$lib/i18n/index.svelte';
 	import { resolveRoute } from '$app/paths';
 	import { toast } from '$lib/components/toast.svelte';
 	import Seo from '$lib/components/Seo.svelte';
-	import { Info, FileText, Eye, Download, X } from '@lucide/svelte';
+	import { 
+		Info, FileText, Eye, Download, X, 
+		ArrowLeft, Trash2, UploadCloud, Check, 
+		Loader2, CheckCircle2, FileArchive, 
+		ChevronLeft, ChevronRight, FileSearch, 
+		ShieldCheck, Zap, HelpCircle, ChevronDown,
+		Minus, Plus
+	} from '@lucide/svelte';
 
 	// Svelte 5 & TypeScript specific interfaces for typing libraries safely without using 'any'
 	interface PdfJsTextItem {
@@ -121,11 +129,6 @@
 		}
 	}
 
-	function clearLogs() {
-		logs = [];
-		addLog('Console cleared.');
-	}
-
 	onMount(async () => {
 		addLog(i18n.t('tools.splitPdf.logs.ready'));
 		try {
@@ -212,7 +215,7 @@
 					let maxUniqueCount = 1;
 					if (minLinesCount !== Infinity) {
 						for (let i = 0; i < minLinesCount; i++) {
-							const uniqueVals = new Set<string>();
+							const uniqueVals = new SvelteSet<string>();
 							for (let p = 0; p < pagesToCompare; p++) {
 								const txt = pagesLines[p][i].trim();
 								if (txt.length > 0) {
@@ -456,7 +459,7 @@
 				const filename = `${cleanName}.pdf`;
 				zip.file(filename, subPdfBytes);
 
-				const pdfBlob = new Blob([subPdfBytes] as any[], { type: 'application/pdf' });
+				const pdfBlob = new Blob([subPdfBytes as unknown as BlobPart], { type: 'application/pdf' });
 				const pdfUrl = URL.createObjectURL(pdfBlob);
 				generatedFiles.push({
 					name: filename,
@@ -510,17 +513,6 @@
 			isProcessing = false;
 		}
 	}
-
-	// Helper for previewing name
-	let currentPreviewName = $derived.by(() => {
-		const lines = pageLinesCache[currentPreviewPage];
-		if (!lines || selectedLineIndex === -1 || selectedLineIndex >= lines.length) return '';
-		let val = lines[selectedLineIndex].trim();
-		if (val.startsWith(':') || val.startsWith('-')) {
-			val = val.substring(1).trim();
-		}
-		return val;
-	});
 
 	// Zoom operations
 	function adjustZoom(factor: number) {
@@ -576,16 +568,14 @@
 
 {#if loadingLibs}
 	<div class="min-h-[60vh] flex flex-col items-center justify-center gap-4">
-		<div class="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+		<Loader2 class="w-12 h-12 text-blue-600 animate-spin" />
 		<p class="text-sm font-semibold text-slate-500 animate-pulse">{i18n.t('tools.splitPdf.loadingLibs')}</p>
 	</div>
 {:else}
 	<div class="space-y-6 animate-fade-in max-w-7xl mx-auto">
 		<!-- Navigation back button -->
 		<a href={resolveRoute('/[lang]', { lang: i18n.current })} class="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-blue-600 transition">
-			<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-				<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-			</svg>
+			<ArrowLeft class="w-4 h-4" />
 			{i18n.t('tools.splitPdf.btnBack')}
 		</a>
 
@@ -604,7 +594,7 @@
 			<!-- LEFT COLUMN: Configurations & Processing steps (7-col) -->
 			<div class="contents lg:block lg:col-span-7 lg:space-y-6">
 				<!-- Card 1: File Upload & Details -->
-				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 order-1 lg:order-none">
+				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 order-1 lg:order-0">
 					<h3 class="text-base font-bold mb-4 text-slate-900 flex items-center gap-2.5 font-title">
 						<span class="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 text-xs font-bold shadow-sm">
 							{i18n.t('tools.splitPdf.step1')}
@@ -627,9 +617,7 @@
 							<div class="flex items-start justify-between gap-4">
 								<div class="flex items-center gap-3">
 									<div class="p-2.5 bg-blue-600 text-white rounded-lg shadow-md shadow-blue-500/10">
-										<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-										</svg>
+										<FileText class="w-6 h-6" />
 									</div>
 									<div class="truncate max-w-[260px] sm:max-w-[360px]">
 										<p class="text-sm font-extrabold text-slate-950 truncate" title={fileName}>{fileName}</p>
@@ -643,20 +631,18 @@
 									class="p-1.5 hover:bg-red-50 text-slate-400 hover:text-red-600 rounded-lg border border-transparent hover:border-red-200 transition shadow-sm z-10"
 									title="Remove File"
 								>
-									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-									</svg>
+									<Trash2 class="w-4 h-4" />
 								</button>
 							</div>
 
 							<!-- Metrics Specs -->
 							<div class="grid grid-cols-2 gap-4 border-t border-slate-100 pt-4 text-xs font-semibold">
 								<div class="bg-white/80 p-3 rounded-lg border border-slate-100 shadow-sm flex flex-col">
-									<span class="text-slate-400 text-[10px] uppercase font-bold tracking-wide">Size</span>
+									<span class="text-slate-450 text-[10px] uppercase font-bold tracking-wide">Size</span>
 									<span class="text-slate-900 font-extrabold font-mono mt-0.5">{fileSize}</span>
 								</div>
 								<div class="bg-white/80 p-3 rounded-lg border border-slate-100 shadow-sm flex flex-col">
-									<span class="text-slate-400 text-[10px] uppercase font-bold tracking-wide">Total Pages</span>
+									<span class="text-slate-450 text-[10px] uppercase font-bold tracking-wide">Total Pages</span>
 									<span class="text-slate-900 font-extrabold font-mono mt-0.5">{totalPages} Pages</span>
 								</div>
 							</div>
@@ -683,9 +669,7 @@
 							/>
 
 							<div class="p-3 bg-white border border-slate-100 rounded-full text-slate-400 shadow-sm group-hover:scale-105 transition duration-300">
-								<svg class="w-8 h-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-								</svg>
+								<UploadCloud class="w-8 h-8 text-blue-600" />
 							</div>
 
 							<div class="space-y-1">
@@ -697,7 +681,7 @@
 				</div>
 
 				<!-- Card 2: Extracted Filenames Preview configuration -->
-				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 space-y-5 order-3 lg:order-none">
+				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 space-y-5 order-3 lg:order-0">
 					<h3 class="text-base font-bold text-slate-900 flex items-center gap-2.5 font-title">
 						<span class="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 text-xs font-bold shadow-sm">
 							3
@@ -742,7 +726,7 @@
 
 						{#if previewFilenames.length > 0}
 							<div class="grid grid-cols-1 gap-2.5">
-								{#each previewFilenames as item}
+								{#each previewFilenames as item (item.page)}
 									<div class="flex items-center gap-3.5 bg-white border border-blue-50/60 hover:border-blue-200 rounded-xl p-3 shadow-xs hover:shadow-sm transition-all duration-300">
 										<div class="w-7 h-7 rounded-lg bg-rose-50 border border-rose-100/80 text-rose-650 flex items-center justify-center font-mono font-black text-[10px] shrink-0" title="Page {item.page}">
 											{item.page}
@@ -764,7 +748,7 @@
 				</div>
 
 				<!-- Card 3: Execution progress step panel -->
-				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 space-y-5 order-4 lg:order-none">
+				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 space-y-5 order-4 lg:order-0">
 					<h3 class="text-base font-bold text-slate-900 flex items-center gap-2.5 font-title">
 						<span class="flex items-center justify-center w-6 h-6 rounded-lg bg-blue-50 text-blue-600 border border-blue-100 text-xs font-bold shadow-sm">
 							4
@@ -786,9 +770,7 @@
 											{stepParsePdf === 'error' ? 'bg-rose-500 border-rose-500 text-white' : ''}"
 										>
 											{#if stepParsePdf === 'success'}
-												<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-													<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-												</svg>
+												<Check class="w-3.5 h-3.5" />
 											{:else if stepParsePdf === 'running'}
 												<span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping"></span>
 											{:else if stepParsePdf === 'error'}
@@ -822,9 +804,7 @@
 												{stepExtractNames === 'error' ? 'bg-rose-500 border-rose-500 text-white' : ''}"
 											>
 												{#if stepExtractNames === 'success'}
-													<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-													</svg>
+													<Check class="w-3.5 h-3.5" />
 												{:else if stepExtractNames === 'running'}
 													<span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping"></span>
 												{:else if stepExtractNames === 'error'}
@@ -847,24 +827,28 @@
 										</span>
 									</div>
 
-									<!-- Nested Progress Bar inside Step 2 while running -->
+									<!-- Improved Progress Bar inside Step 2 while running -->
 									{#if stepExtractNames === 'running'}
-										<div class="mt-2.5 pl-0.5 space-y-2 max-w-md animate-fade-in">
+										<div class="mt-2.5 pl-0.5 space-y-2.5 max-w-md animate-fade-in bg-slate-100 border border-slate-200/50 rounded-xl p-3.5 shadow-inner">
 											<div class="flex justify-between text-[10px] font-bold text-slate-500">
 												<span class="flex items-center gap-1.5">
-													<svg class="animate-spin h-3.5 w-3.5 text-blue-600 animate-duration-1200" fill="none" viewBox="0 0 24 24">
-														<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-														<path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-													</svg>
+													<Loader2 class="h-3.5 w-3.5 text-blue-605 animate-spin" />
 													<span>{progressCurrent} / {totalPages} {i18n.current === 'id' ? 'Halaman' : 'Pages'}</span>
 												</span>
 												<span class="text-blue-650 font-mono font-extrabold">{progressPercent}%</span>
 											</div>
-											<div class="w-full bg-slate-200/70 border border-slate-350/20 rounded-full h-2 overflow-hidden shadow-inner">
-												<div class="bg-blue-600 h-2 rounded-full transition-all duration-300 shadow-glow-blue" style="width: {progressPercent}%"></div>
+											
+											<!-- Outer progress track -->
+											<div class="w-full bg-slate-200/80 rounded-full h-3 overflow-hidden p-0.5 border border-slate-300/20 shadow-inner">
+												<!-- Glowing gradient progress fill -->
+												<div class="bg-linear-to-r from-blue-500 to-indigo-650 h-2 rounded-full transition-all duration-300 shadow-sm relative overflow-hidden" style="width: {progressPercent}%">
+													<!-- Animated white stripe overlay -->
+													<div class="absolute inset-0 bg-white/20 animate-progress-stripe" style="background-image: linear-gradient(45deg, rgba(255,255,255,0.15) 25%, transparent 25%, transparent 50%, rgba(255,255,255,0.15) 50%, rgba(255,255,255,0.15) 75%, transparent 75%, transparent); background-size: 1rem 1rem;"></div>
+												</div>
 											</div>
+
 											{#if lastExtractedFile}
-												<div class="text-[9.5px] text-slate-500 truncate flex items-center gap-1 mt-1 font-semibold animate-fade-in">
+												<div class="text-[9.5px] text-slate-500 truncate flex items-center gap-1 font-semibold animate-fade-in">
 													<span class="inline-block w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping shrink-0"></span>
 													<span>{i18n.current === 'id' ? 'Memproses:' : 'Processing:'} <span class="font-mono text-slate-700 font-bold">{lastExtractedFile}</span></span>
 												</div>
@@ -884,9 +868,7 @@
 												{stepPackageZip === 'error' ? 'bg-rose-500 border-rose-500 text-white' : ''}"
 											>
 												{#if stepPackageZip === 'success'}
-													<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-														<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-													</svg>
+													<Check class="w-3.5 h-3.5" />
 												{:else if stepPackageZip === 'running'}
 													<span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-ping"></span>
 												{:else if stepPackageZip === 'error'}
@@ -912,7 +894,7 @@
 									<!-- Nested Status Loader for Step 3 zipping while running -->
 									{#if stepPackageZip === 'running'}
 										<div class="mt-2 pl-0.5 max-w-md flex items-center gap-2 text-[9px] text-slate-500 font-semibold italic animate-pulse">
-											<span class="w-2.5 h-2.5 border-2 border-slate-400 border-t-transparent rounded-full animate-spin"></span>
+											<Loader2 class="w-2.5 h-2.5 text-slate-400 animate-spin" />
 											{i18n.current === 'id' ? 'Mengompresi file ke ZIP...' : 'Compressing files to ZIP...'}
 										</div>
 									{/if}
@@ -923,11 +905,7 @@
 
 					{#if stepPackageZip === 'success' && downloadZipUrl}
 						<div class="bg-emerald-50/40 border border-emerald-200 rounded-xl p-5 text-center space-y-4 shadow-xs animate-fade-in">
-							<div class="w-12 h-12 rounded-full bg-emerald-500 text-white flex items-center justify-center mx-auto shadow-md shadow-emerald-500/10">
-								<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-								</svg>
-							</div>
+							<CheckCircle2 class="w-12 h-12 text-emerald-500 mx-auto drop-shadow-sm" />
 							<div class="space-y-1">
 								<p class="text-sm font-extrabold text-slate-900">{i18n.current === 'id' ? 'Pemisahan PDF Selesai!' : 'Splitting Completed!'}</p>
 								<p class="text-xs font-semibold text-slate-500 leading-relaxed max-w-[260px] mx-auto">
@@ -940,9 +918,7 @@
 							<!-- Display mock ZIP file block -->
 							<div class="bg-white border border-slate-200/80 rounded-xl p-3 shadow-xs flex items-center gap-3 max-w-xs mx-auto text-left hover:border-emerald-300 transition-colors duration-300">
 								<div class="p-2 bg-emerald-50 text-emerald-600 rounded-lg shrink-0 border border-emerald-100">
-									<svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-									</svg>
+									<FileArchive class="w-6 h-6 text-emerald-605" />
 								</div>
 								<div class="min-w-0 flex-1">
 									<p class="text-xs font-bold text-slate-900 truncate leading-snug">
@@ -955,16 +931,16 @@
 							</div>
 
 							<div class="grid grid-cols-2 gap-3 pt-2">
+								<!-- eslint-disable svelte/no-navigation-without-resolve -->
 								<a
 									href={downloadZipUrl}
 									download={downloadZipName}
 									class="py-2.5 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-sm shadow-emerald-500/10 text-center flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
 								>
-									<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-										<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-									</svg>
+									<Download class="w-4 h-4" />
 									{i18n.current === 'id' ? 'Unduh Lagi' : 'Download Again'}
 								</a>
+								<!-- eslint-enable svelte/no-navigation-without-resolve -->
 								<button
 									onclick={removeUploadedFile}
 									type="button"
@@ -981,10 +957,10 @@
 										{i18n.current === 'id' ? 'Unduh / Pratinjau File Individual' : 'Download / Preview Individual Files'}
 									</p>
 									<div class="max-h-[200px] overflow-y-auto space-y-2 pr-1 scrollbar-thin">
-										{#each generatedFiles as file, idx}
-											<div class="flex items-center justify-between gap-3 bg-white border border-slate-250/70 hover:border-blue-300 rounded-xl p-2.5 shadow-xs transition-colors duration-200">
+										{#each generatedFiles as file, idx (file.name)}
+											<div class="flex items-center justify-between gap-3 bg-white border border-slate-255/70 hover:border-blue-300 rounded-xl p-2.5 shadow-xs transition-colors duration-200">
 												<div class="flex items-center gap-2.5 min-w-0 flex-1">
-													<div class="w-6 h-6 rounded-lg bg-rose-50 text-rose-650 flex items-center justify-center font-mono font-black text-[9px] border border-rose-100/80 shrink-0">
+													<div class="w-6 h-6 rounded-lg bg-rose-50 text-rose-655 flex items-center justify-center font-mono font-black text-[9px] border border-rose-100/80 shrink-0">
 														{idx + 1}
 													</div>
 													<span class="text-xs font-bold text-slate-800 truncate" title={file.name}>
@@ -1002,6 +978,7 @@
 														<Eye class="w-3.5 h-3.5" />
 													</button>
 													<!-- Download Button -->
+													<!-- eslint-disable svelte/no-navigation-without-resolve -->
 													<a
 														href={file.url}
 														download={file.name}
@@ -1010,6 +987,7 @@
 													>
 														<Download class="w-3.5 h-3.5" />
 													</a>
+													<!-- eslint-enable svelte/no-navigation-without-resolve -->
 												</div>
 											</div>
 										{/each}
@@ -1024,9 +1002,7 @@
 							class="w-full py-4 px-6 rounded-xl font-bold text-sm text-white flex items-center justify-center gap-2 group transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
 							bg-blue-600 hover:bg-blue-500 shadow-glow-blue hover:shadow-glow-blue-lg active:scale-[0.99]"
 						>
-							<svg class="w-5 h-5 group-hover:translate-y-0.5 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-							</svg>
+							<Download class="w-5 h-5 group-hover:translate-y-0.5 transition" />
 							{i18n.t('tools.splitPdf.processBtn')}
 						</button>
 					{/if}
@@ -1036,7 +1012,7 @@
 			<!-- RIGHT COLUMN: Interactive Dual Inspector & System Logs (5-col) -->
 			<div class="contents lg:block lg:col-span-5 lg:space-y-6">
 				<!-- Card Panel Inspector (Sample PDF pages and texts) -->
-				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 flex flex-col h-[540px] order-2 lg:order-none">
+				<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm shadow-blue-500/5 flex flex-col h-[540px] order-2 lg:order-0">
 					<div class="flex items-center justify-between mb-4 border-b border-slate-100 pb-3 shrink-0">
 						<h3 class="text-xs font-extrabold uppercase tracking-widest text-slate-500 flex items-center gap-2 font-title">
 							<span class="flex items-center justify-center w-5 h-5 rounded bg-blue-50 text-blue-600 border border-blue-100 text-[10px] font-bold shadow-xs">
@@ -1044,31 +1020,26 @@
 							</span>
 							{i18n.t('tools.splitPdf.inspectorTitle')}
 						</h3>
-						
-						<!-- Page Navigation buttons -->
+											<!-- Page Navigation buttons -->
 						<div class="flex items-center gap-1 bg-slate-100 border border-slate-200 p-1 rounded-lg">
 							<button
 								onclick={() => navigatePage(-1)}
 								disabled={!globalPdfJsDoc || currentPreviewPage === 1}
-								class="p-1 hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent rounded text-slate-600 transition"
+								class="p-1 hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent rounded text-slate-600 transition flex items-center justify-center"
 								aria-label="Previous Page"
 							>
-								<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-								</svg>
+								<ChevronLeft class="w-3.5 h-3.5" />
 							</button>
-							<span class="text-[10px] font-extrabold text-slate-650 px-1.5 font-mono">
+							<span class="text-[10px] font-extrabold text-slate-655 px-1.5 font-mono">
 								{i18n.t('tools.splitPdf.pageLabel', { current: currentPreviewPage, total: totalPages || 1 })}
 							</span>
 							<button
 								onclick={() => navigatePage(1)}
 								disabled={!globalPdfJsDoc || currentPreviewPage === totalPages}
-								class="p-1 hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent rounded text-slate-600 transition"
+								class="p-1 hover:bg-slate-200 disabled:opacity-30 disabled:hover:bg-transparent rounded text-slate-600 transition flex items-center justify-center"
 								aria-label="Next Page"
 							>
-								<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-								</svg>
+								<ChevronRight class="w-3.5 h-3.5" />
 							</button>
 						</div>
 					</div>
@@ -1102,9 +1073,7 @@
 						{#if !globalPdfJsDoc}
 							<!-- Empty screen -->
 							<div class="flex flex-col items-center justify-center h-full text-slate-400 py-10 font-medium select-none">
-								<svg class="w-12 h-12 text-slate-350 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-									<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 13h6m-3-3v6m-9 1V4a2 2 0 012-2h6l2 2h6a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z" />
-								</svg>
+								<FileSearch class="w-12 h-12 text-slate-350 mb-3" />
 								<p class="text-xs text-center max-w-[200px] font-semibold leading-relaxed">{i18n.t('tools.splitPdf.inspectorEmpty')}</p>
 							</div>
 						{:else}
@@ -1112,7 +1081,7 @@
 							<div class="space-y-1.5 p-0.5" class:hidden={activeTab !== 'list'}>
 								{#if isParsingText}
 									<div class="flex flex-col items-center justify-center py-24 text-slate-400">
-										<div class="w-6 h-6 border-2 border-blue-600 border-t-transparent rounded-full animate-spin mb-2"></div>
+										<Loader2 class="w-6 h-6 text-blue-600 animate-spin mb-2" />
 										<p class="text-xs font-semibold">{i18n.t('tools.splitPdf.inspectorLoading')}</p>
 									</div>
 								{:else}
@@ -1160,7 +1129,7 @@
 								<!-- Render Spinner -->
 								{#if isRenderingCanvas}
 									<div class="absolute inset-0 bg-slate-950/75 flex items-center justify-center z-20 rounded-xl">
-										<div class="w-7 h-7 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+										<Loader2 class="w-7 h-7 text-white animate-spin" />
 									</div>
 								{/if}
 								
@@ -1169,12 +1138,10 @@
 									<button 
 										onclick={() => adjustZoom(-10)} 
 										disabled={canvasZoom <= 50} 
-										class="p-1 text-slate-400 hover:text-white disabled:opacity-35 disabled:hover:text-slate-400 rounded transition" 
+										class="p-1 text-slate-400 hover:text-white disabled:opacity-35 disabled:hover:text-slate-400 rounded transition flex items-center justify-center" 
 										title="Zoom Out"
 									>
-										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 12H4" />
-										</svg>
+										<Minus class="w-3.5 h-3.5" />
 									</button>
 									<button 
 										onclick={resetZoom} 
@@ -1186,12 +1153,10 @@
 									<button 
 										onclick={() => adjustZoom(10)} 
 										disabled={canvasZoom >= 200} 
-										class="p-1 text-slate-400 hover:text-white disabled:opacity-35 disabled:hover:text-slate-400 rounded transition" 
+										class="p-1 text-slate-400 hover:text-white disabled:opacity-35 disabled:hover:text-slate-400 rounded transition flex items-center justify-center" 
 										title="Zoom In"
 									>
-										<svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-											<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
-										</svg>
+										<Plus class="w-3.5 h-3.5" />
 									</button>
 								</div>
 
@@ -1221,30 +1186,24 @@
 			<div class="grid grid-cols-1 md:grid-cols-2 gap-8 leading-relaxed">
 				<div class="space-y-3.5">
 					<h4 class="text-sm font-extrabold text-blue-700 flex items-center gap-2 font-title">
-						<svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-						</svg>
+						<ShieldCheck class="w-5 h-5 text-blue-605" />
 						{i18n.t('tools.splitPdf.featureClientSide')}
 					</h4>
-					<p class="text-xs text-slate-600 font-semibold">{i18n.t('tools.splitPdf.aboutP1')}</p>
+					<p class="text-xs text-slate-655 font-semibold">{i18n.t('tools.splitPdf.aboutP1')}</p>
 				</div>
 				<div class="space-y-3.5">
 					<h4 class="text-sm font-extrabold text-blue-700 flex items-center gap-2 font-title">
-						<svg class="w-5 h-5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-							<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z" />
-						</svg>
+						<Zap class="w-5 h-5 text-blue-605" />
 						{i18n.t('tools.splitPdf.featureHighSpeed')}
 					</h4>
-					<p class="text-xs text-slate-600 font-semibold">{i18n.t('tools.splitPdf.aboutP2')}</p>
+					<p class="text-xs text-slate-655 font-semibold">{i18n.t('tools.splitPdf.aboutP2')}</p>
 				</div>
 			</div>
 
 			<!-- FAQ Accordion section -->
 			<div class="space-y-4 border-t border-slate-100 pt-6">
 				<h4 class="text-sm font-extrabold text-slate-900 flex items-center gap-2 font-title">
-					<svg class="w-4.5 h-4.5 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-						<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-					</svg>
+					<HelpCircle class="w-4.5 h-4.5 text-blue-605" />
 					{i18n.t('tools.splitPdf.faqTitle')}
 				</h4>
 
@@ -1256,9 +1215,7 @@
 							class="w-full p-4 flex items-center justify-between text-left font-bold text-xs text-slate-800 hover:bg-slate-100/50 transition"
 						>
 							<span>{i18n.t('tools.splitPdf.faqQ1')}</span>
-							<svg class="w-4 h-4 text-slate-400 transition-transform {faqOpen.q1 ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-							</svg>
+							<ChevronDown class="w-4 h-4 text-slate-405 transition-transform {faqOpen.q1 ? 'rotate-180' : ''}" />
 						</button>
 						{#if faqOpen.q1}
 							<div class="p-4 border-t border-slate-200 text-xs text-slate-600 bg-white font-semibold leading-relaxed animate-fade-in">
@@ -1274,9 +1231,7 @@
 							class="w-full p-4 flex items-center justify-between text-left font-bold text-xs text-slate-800 hover:bg-slate-100/50 transition"
 						>
 							<span>{i18n.t('tools.splitPdf.faqQ2')}</span>
-							<svg class="w-4 h-4 text-slate-400 transition-transform {faqOpen.q2 ? 'rotate-180' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-								<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-							</svg>
+							<ChevronDown class="w-4 h-4 text-slate-405 transition-transform {faqOpen.q2 ? 'rotate-180' : ''}" />
 						</button>
 						{#if faqOpen.q2}
 							<div class="p-4 border-t border-slate-200 text-xs text-slate-650 bg-white font-semibold leading-relaxed animate-fade-in">
@@ -1305,6 +1260,7 @@
 					</h3>
 				</div>
 				<div class="flex items-center gap-2">
+					<!-- eslint-disable svelte/no-navigation-without-resolve -->
 					<a
 						href={previewModalFile.url}
 						download={previewModalFile.name}
@@ -1313,6 +1269,7 @@
 						<Download class="w-3.5 h-3.5" />
 						{i18n.current === 'id' ? 'Unduh' : 'Download'}
 					</a>
+					<!-- eslint-enable svelte/no-navigation-without-resolve -->
 					<button
 						onclick={() => previewModalFile = null}
 						type="button"
@@ -1345,4 +1302,11 @@
 		animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 	}
 	
+	@keyframes progressStripe {
+		from { background-position: 0 0; }
+		to { background-position: 1rem 0; }
+	}
+	.animate-progress-stripe {
+		animation: progressStripe 1s linear infinite;
+	}
 </style>
