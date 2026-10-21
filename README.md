@@ -39,6 +39,17 @@ Reduce PDF file sizes locally without uploading sensitive files to cloud servers
 * **Before/After Analysis**: Real-time display of original size, compressed size, and savings percentage badge.
 * **100% Private**: Browser canvas rasterization and re-encoding with zero network transmission.
 
+### 4. PDF to Images
+Convert multi-page PDF documents into high-resolution JPG or PNG image files.
+* **Format & DPI Options**: Choose JPG or PNG with Standard (150 DPI) or High (300 DPI) resolution.
+* **Flexible Download**: Download individual page images or package everything into a single ZIP archive.
+
+### 5. Images to PDF
+Transform multiple photo scans and digital images into a formatted PDF document.
+* **Multi-format Support**: Upload JPG, PNG, and WebP images.
+* **Custom Layouts**: Select paper sizes (A4, US Letter, Fit to Image), orientations (Auto, Portrait, Landscape), and margins.
+* **Interactive Sequence**: Reorder pictures freely before compiling the PDF document.
+
 ---
 
 ## 🛠️ Technical Architecture & Stack
@@ -93,8 +104,8 @@ We are designing PDFTools to grow into a complete open-source, client-side alter
 - [x] **PDF Certificate Splitter & Renamer** (Completed)
 - [x] **PDF Merge** (Completed)
 - [x] **PDF Compressor** (Completed)
-- [ ] **PDF to Images / Image Extractor**: Extract and download all embedded images or render pages to JPG/PNG.
-- [ ] **Images to PDF**: Convert photos and scanned images into a formatted PDF document.
+- [x] **PDF to Images / Image Extractor** (Completed)
+- [x] **Images to PDF** (Completed)
 - [ ] **Rotate & Organize Pages**: Interactive visual grid to rotate, reorder, or delete individual pages.
 - [ ] **Encrypt / Decrypt PDF**: Locally password-protect files or remove encryption layers.
 

@@ -6,7 +6,6 @@
 	import Zap from '@lucide/svelte/icons/zap';
 	import FileText from '@lucide/svelte/icons/file-text';
 	import ArrowRight from '@lucide/svelte/icons/arrow-right';
-	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import Image from '@lucide/svelte/icons/image';
 	import FileUp from '@lucide/svelte/icons/file-up';
 	import RotateCw from '@lucide/svelte/icons/rotate-cw';
@@ -40,7 +39,7 @@
 			{i18n.t('dashboard.activeTools')}
 		</h3>
 		
-		<div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+		<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
 			<!-- 1. PDF Certificate Splitter Card -->
 			<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-[0_2px_12px_rgba(0,0,0,0.015)] hover:shadow-glow-blue-lg hover:border-blue-400/80 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden">
 				<div class="absolute top-0 left-0 w-full h-[3px] bg-blue-600"></div>
@@ -93,7 +92,7 @@
 				<div class="mt-8 pt-5 border-t border-slate-100 flex items-center justify-between">
 					<span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200/50 px-2 py-0.5 rounded-md shadow-xs">
 						<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-						New
+						Popular
 					</span>
 					<a
 						href={resolveRoute('/[lang]/tools/merge', { lang: i18n.current })}
@@ -125,11 +124,75 @@
 				<div class="mt-8 pt-5 border-t border-slate-100 flex items-center justify-between">
 					<span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200/50 px-2 py-0.5 rounded-md shadow-xs">
 						<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
-						New
+						Popular
 					</span>
 					<a
 						href={resolveRoute('/[lang]/tools/compress', { lang: i18n.current })}
 						class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 active:scale-[0.98] rounded-xl shadow-sm transition-all duration-300"
+					>
+						<span>{i18n.t('dashboard.openTool')}</span>
+						<ArrowRight class="w-3.5 h-3.5" />
+					</a>
+				</div>
+			</div>
+
+			<!-- 4. PDF to Images Card -->
+			<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-[0_2px_12px_rgba(0,0,0,0.015)] hover:shadow-glow-blue-lg hover:border-blue-400/80 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden">
+				<div class="absolute top-0 left-0 w-full h-[3px] bg-purple-600"></div>
+
+				<div class="space-y-4">
+					<div class="w-12 h-12 rounded-xl bg-purple-50 text-purple-600 border border-purple-100 flex items-center justify-center group-hover:scale-105 transition-transform duration-300 shadow-sm">
+						<Image class="w-6 h-6" />
+					</div>
+					
+					<h4 class="text-lg font-bold text-slate-900 font-title group-hover:text-purple-700 transition duration-200">
+						{i18n.t('tools.pdfToImg.title')}
+					</h4>
+					<p class="text-xs text-slate-500 font-semibold leading-relaxed">
+						{i18n.t('tools.pdfToImg.shortDescription')}
+					</p>
+				</div>
+				
+				<div class="mt-8 pt-5 border-t border-slate-100 flex items-center justify-between">
+					<span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200/50 px-2 py-0.5 rounded-md shadow-xs">
+						<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+						New
+					</span>
+					<a
+						href={resolveRoute('/[lang]/tools/pdf-to-img', { lang: i18n.current })}
+						class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-purple-600 hover:bg-purple-500 active:scale-[0.98] rounded-xl shadow-sm transition-all duration-300"
+					>
+						<span>{i18n.t('dashboard.openTool')}</span>
+						<ArrowRight class="w-3.5 h-3.5" />
+					</a>
+				</div>
+			</div>
+
+			<!-- 5. Images to PDF Card -->
+			<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-[0_2px_12px_rgba(0,0,0,0.015)] hover:shadow-glow-yellow-lg hover:border-amber-400/80 transition-all duration-300 flex flex-col justify-between group relative overflow-hidden">
+				<div class="absolute top-0 left-0 w-full h-[3px] bg-amber-500"></div>
+
+				<div class="space-y-4">
+					<div class="w-12 h-12 rounded-xl bg-amber-50 text-amber-600 border border-amber-100 flex items-center justify-center group-hover:scale-105 transition-transform duration-300 shadow-sm">
+						<FileUp class="w-6 h-6" />
+					</div>
+					
+					<h4 class="text-lg font-bold text-slate-900 font-title group-hover:text-amber-700 transition duration-200">
+						{i18n.t('tools.imgToPdf.title')}
+					</h4>
+					<p class="text-xs text-slate-500 font-semibold leading-relaxed">
+						{i18n.t('tools.imgToPdf.shortDescription')}
+					</p>
+				</div>
+				
+				<div class="mt-8 pt-5 border-t border-slate-100 flex items-center justify-between">
+					<span class="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200/50 px-2 py-0.5 rounded-md shadow-xs">
+						<span class="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></span>
+						New
+					</span>
+					<a
+						href={resolveRoute('/[lang]/tools/img-to-pdf', { lang: i18n.current })}
+						class="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-bold text-white bg-amber-600 hover:bg-amber-500 active:scale-[0.98] rounded-xl shadow-sm transition-all duration-300"
 					>
 						<span>{i18n.t('dashboard.openTool')}</span>
 						<ArrowRight class="w-3.5 h-3.5" />
@@ -146,42 +209,14 @@
 			{i18n.t('dashboard.comingSoonTitle')}
 		</h3>
 		
-		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-			<!-- Upcoming 1: PDF to Images -->
-			<div class="bg-white/80 border border-slate-200/70 rounded-xl p-5 shadow-xs opacity-80 hover:opacity-100 transition-opacity duration-200 flex flex-col justify-between space-y-3">
-				<div class="space-y-2">
-					<div class="w-9 h-9 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
-						<Image class="w-5 h-5" />
-					</div>
-					<h5 class="text-xs font-bold text-slate-900 font-title">PDF to Images / Extractor</h5>
-					<p class="text-[11px] text-slate-500 font-medium leading-relaxed">Extract and convert PDF pages into high-resolution JPG or PNG images.</p>
-				</div>
-				<span class="self-start rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-500">
-					{i18n.t('common.comingSoon')}
-				</span>
-			</div>
-
-			<!-- Upcoming 2: Images to PDF -->
-			<div class="bg-white/80 border border-slate-200/70 rounded-xl p-5 shadow-xs opacity-80 hover:opacity-100 transition-opacity duration-200 flex flex-col justify-between space-y-3">
-				<div class="space-y-2">
-					<div class="w-9 h-9 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
-						<FileUp class="w-5 h-5" />
-					</div>
-					<h5 class="text-xs font-bold text-slate-900 font-title">Images to PDF</h5>
-					<p class="text-[11px] text-slate-500 font-medium leading-relaxed">Convert multiple JPG, PNG, or WebP pictures into a single document.</p>
-				</div>
-				<span class="self-start rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-500">
-					{i18n.t('common.comingSoon')}
-				</span>
-			</div>
-
-			<!-- Upcoming 3: Page Organizer -->
+		<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+			<!-- Upcoming 1: Page Organizer -->
 			<div class="bg-white/80 border border-slate-200/70 rounded-xl p-5 shadow-xs opacity-80 hover:opacity-100 transition-opacity duration-200 flex flex-col justify-between space-y-3">
 				<div class="space-y-2">
 					<div class="w-9 h-9 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
 						<RotateCw class="w-5 h-5" />
 					</div>
-					<h5 class="text-xs font-bold text-slate-900 font-title">Rotate & Organize</h5>
+					<h5 class="text-xs font-bold text-slate-900 font-title">Rotate & Organize Pages</h5>
 					<p class="text-[11px] text-slate-500 font-medium leading-relaxed">Rotate pages, reorder sequence, or delete unwanted pages easily.</p>
 				</div>
 				<span class="self-start rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-500">
@@ -189,7 +224,7 @@
 				</span>
 			</div>
 
-			<!-- Upcoming 4: Protect & Unlock -->
+			<!-- Upcoming 2: Protect & Unlock -->
 			<div class="bg-white/80 border border-slate-200/70 rounded-xl p-5 shadow-xs opacity-80 hover:opacity-100 transition-opacity duration-200 flex flex-col justify-between space-y-3">
 				<div class="space-y-2">
 					<div class="w-9 h-9 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
@@ -197,6 +232,20 @@
 					</div>
 					<h5 class="text-xs font-bold text-slate-900 font-title">Protect & Unlock PDF</h5>
 					<p class="text-[11px] text-slate-500 font-medium leading-relaxed">Secure files with password protection or remove passwords locally.</p>
+				</div>
+				<span class="self-start rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-500">
+					{i18n.t('common.comingSoon')}
+				</span>
+			</div>
+
+			<!-- Upcoming 3: Page Numbers & Watermark -->
+			<div class="bg-white/80 border border-slate-200/70 rounded-xl p-5 shadow-xs opacity-80 hover:opacity-100 transition-opacity duration-200 flex flex-col justify-between space-y-3">
+				<div class="space-y-2">
+					<div class="w-9 h-9 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center">
+						<FileText class="w-5 h-5" />
+					</div>
+					<h5 class="text-xs font-bold text-slate-900 font-title">Page Numbers & Watermark</h5>
+					<p class="text-[11px] text-slate-500 font-medium leading-relaxed">Add customizable page numbering or security watermark text to pages.</p>
 				</div>
 				<span class="self-start rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold text-slate-500">
 					{i18n.t('common.comingSoon')}

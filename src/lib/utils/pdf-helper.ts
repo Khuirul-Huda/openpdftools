@@ -44,6 +44,22 @@ export interface PdfLibModule {
 
 let cachedPdfJs: PdfJsModule | null = null;
 let cachedPdfLib: PdfLibModule | null = null;
+let cachedJSZip: JSZipConstructor | null = null;
+
+export interface JSZipInstance {
+	file: (name: string, data: Uint8Array | Blob | ArrayBuffer) => void;
+	generateAsync: (options: { type: 'blob' }, onUpdate?: (metadata: { percent: number }) => void) => Promise<Blob>;
+}
+
+export type JSZipConstructor = new () => JSZipInstance;
+
+export async function getJSZip(): Promise<JSZipConstructor> {
+	if (cachedJSZip) return cachedJSZip;
+	const jszipModule = await import('jszip');
+	const ctor = (jszipModule.default || jszipModule) as unknown as JSZipConstructor;
+	cachedJSZip = ctor;
+	return ctor;
+}
 
 export async function getPdfJs(): Promise<PdfJsModule> {
 	if (cachedPdfJs) return cachedPdfJs;
