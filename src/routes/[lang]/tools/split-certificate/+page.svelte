@@ -5,14 +5,27 @@
 	import { resolveRoute } from '$app/paths';
 	import { toast } from '$lib/components/toast.svelte';
 	import Seo from '$lib/components/Seo.svelte';
-	import { 
-		Info, FileText, Eye, Download, X, 
-		ArrowLeft, Trash2, UploadCloud, Check, 
-		Loader2, CheckCircle2, FileArchive, 
-		ChevronLeft, ChevronRight, FileSearch, 
-		ShieldCheck, Zap, HelpCircle, ChevronDown,
-		Minus, Plus
-	} from '@lucide/svelte';
+	import Info from '@lucide/svelte/icons/info';
+	import FileText from '@lucide/svelte/icons/file-text';
+	import Eye from '@lucide/svelte/icons/eye';
+	import Download from '@lucide/svelte/icons/download';
+	import X from '@lucide/svelte/icons/x';
+	import ArrowLeft from '@lucide/svelte/icons/arrow-left';
+	import Trash2 from '@lucide/svelte/icons/trash-2';
+	import UploadCloud from '@lucide/svelte/icons/upload-cloud';
+	import Check from '@lucide/svelte/icons/check';
+	import Loader2 from '@lucide/svelte/icons/loader-2';
+	import CheckCircle2 from '@lucide/svelte/icons/check-circle-2';
+	import FileArchive from '@lucide/svelte/icons/file-archive';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import FileSearch from '@lucide/svelte/icons/file-search';
+	import ShieldCheck from '@lucide/svelte/icons/shield-check';
+	import Zap from '@lucide/svelte/icons/zap';
+	import HelpCircle from '@lucide/svelte/icons/help-circle';
+	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import Minus from '@lucide/svelte/icons/minus';
+	import Plus from '@lucide/svelte/icons/plus';
 
 	// Svelte 5 & TypeScript specific interfaces for typing libraries safely without using 'any'
 	interface PdfJsTextItem {

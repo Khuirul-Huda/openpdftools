@@ -19,15 +19,25 @@ Unlike traditional document converters that upload your confidential files to re
 
 ---
 
-## 📦 Module Highlight: PDF Certificate Splitter & Renamer
+## 📦 Modules & Capabilities
 
-The first core utility in PDFTools is the **PDF Certificate Splitter**. It is designed to take a large, compiled certificate PDF (e.g., from a webinar, workshop, or course) and automatically separate it into individual files named after each recipient.
-
-### Core Features:
+### 1. PDF Certificate Splitter & Renamer
+Automatically split a bulk certificate PDF into individual files named after each recipient.
 * **Instant Name Detection**: Scans the text structure of the document to locate participant names dynamically.
-* **Visual Document Workbench**: Inspect text strings or toggle over to the **Visual Page Preview** featuring zoom controls (50% to 200%) and fit overlays to inspect text placement on actual pages.
-* **Local ZIP Generation**: Packages all split, custom-named certificates into a compressed `.zip` archive instantly.
-* **Developer Terminal Console**: Outputs colored runtime execution logs in real-time.
+* **Visual Document Workbench**: Visual preview with zoom controls (50% to 200%) to inspect text placement.
+* **Local ZIP Generation**: Packages all split, custom-named certificates into a compressed `.zip` archive.
+
+### 2. PDF Merge
+Combine multiple individual PDF documents into a single document with custom ordering.
+* **Interactive Ordering**: Drag or use up/down controls to arrange documents in the exact order desired.
+* **Live Thumbnails**: Instant client-side page 1 preview for each uploaded document.
+* **Metadata & Custom Output**: Define output file name and auto-aggregate page counts.
+
+### 3. PDF Compressor
+Reduce PDF file sizes locally without uploading sensitive files to cloud servers.
+* **3 Preset Levels**: Extreme (72 DPI, high reduction), Recommended (130 DPI, balanced), and Light (200 DPI, crisp).
+* **Before/After Analysis**: Real-time display of original size, compressed size, and savings percentage badge.
+* **100% Private**: Browser canvas rasterization and re-encoding with zero network transmission.
 
 ---
 
@@ -40,7 +50,7 @@ The first core utility in PDFTools is the **PDF Certificate Splitter**. It is de
 * **Prerendering**: Structured static site generation (SSG) configurations pre-rendering dynamic routes for SEO crawl bots.
 * **PDF Operations**:
   - `pdfjs-dist` (version 6.0.227) for local client-side text layer parse operations and canvas rendering.
-  - `pdf-lib` for document extraction, copying page buffers, and saving new sub-PDF streams.
+  - `pdf-lib` for document extraction, copying page buffers, merging, and compression.
 * **Archiving**: `jszip` for client-side multi-file ZIP compression.
 * **Package Management**: Managed with [Bun](https://bun.sh) package manager.
 
@@ -53,7 +63,7 @@ Ensure you have [Bun](https://bun.sh) installed.
 ### 1. Clone & Install Dependencies
 ```bash
 git clone <repository-url>
-cd pdftools
+cd openpdftools
 bun install
 ```
 
@@ -78,10 +88,14 @@ bun run build
 
 ## 🗺️ Roadmap & Upcoming Modules
 
-We are designing PDFTools to grow into an open-source hub of document utilities. Future modules include:
-- [ ] **PDF Merge**: Combine multiple individual PDF documents in custom or chronological order.
-- [ ] **PDF Compressor**: Reduce file sizes locally without losing text sharpness or vector fidelity.
-- [ ] **PDF Image Extractor**: Extract, download, and zip all raster image assets from inside PDF pages.
+We are designing PDFTools to grow into a complete open-source, client-side alternative to services like iLovePDF.
+
+- [x] **PDF Certificate Splitter & Renamer** (Completed)
+- [x] **PDF Merge** (Completed)
+- [x] **PDF Compressor** (Completed)
+- [ ] **PDF to Images / Image Extractor**: Extract and download all embedded images or render pages to JPG/PNG.
+- [ ] **Images to PDF**: Convert photos and scanned images into a formatted PDF document.
+- [ ] **Rotate & Organize Pages**: Interactive visual grid to rotate, reorder, or delete individual pages.
 - [ ] **Encrypt / Decrypt PDF**: Locally password-protect files or remove encryption layers.
 
 ---
