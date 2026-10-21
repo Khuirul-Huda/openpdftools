@@ -8,6 +8,7 @@
 		getPdfJs,
 		getPdfLib,
 		getJSZip,
+		generateThumbnail,
 		formatBytes,
 		downloadBlob
 	} from '$lib/utils/pdf-helper';
@@ -21,8 +22,15 @@
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import HelpCircle from '@lucide/svelte/icons/help-circle';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Sliders from '@lucide/svelte/icons/sliders';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
+	import Eye from '@lucide/svelte/icons/eye';
+	import ZoomIn from '@lucide/svelte/icons/zoom-in';
+	import ZoomOut from '@lucide/svelte/icons/zoom-out';
+	import X from '@lucide/svelte/icons/x';
+	import FileText from '@lucide/svelte/icons/file-text';
 
 	interface RenderedPage {
 		pageNum: number;
@@ -34,6 +42,7 @@
 	let currentFile = $state<File | null>(null);
 	let fileBuffer = $state<ArrayBuffer | null>(null);
 	let totalPages = $state(0);
+	let docThumbnail = $state('');
 
 	let imageFormat = $state<'jpeg' | 'png'>('jpeg');
 	let resolution = $state<'standard' | 'high'>('standard');
@@ -42,6 +51,28 @@
 	let isZipping = $state(false);
 	let progress = $state({ current: 0, total: 0 });
 	let renderedPages = $state<RenderedPage[]>([]);
+
+	// Lightbox Preview State
+	let lightboxIndex = $state<number | null>(null);
+	let lightboxZoom = $state(100);
+
+	function openLightbox(index: number) {
+		lightboxIndex = index;
+		lightboxZoom = 100;
+	}
+
+	function closeLightbox() {
+		lightboxIndex = null;
+		lightboxZoom = 100;
+	}
+
+	function cycleLightbox(delta: number) {
+		if (lightboxIndex === null) return;
+		const next = lightboxIndex + delta;
+		if (next >= 0 && next < renderedPages.length) {
+			lightboxIndex = next;
+		}
+	}
 
 	let faqOpen = $state<Record<string, boolean>>({ q1: false, q2: false });
 
@@ -54,6 +85,8 @@
 		const file = files[0];
 		currentFile = file;
 		renderedPages = [];
+		docThumbnail = '';
+		lightboxIndex = null;
 
 		try {
 			const buffer = await file.arrayBuffer();
@@ -62,6 +95,8 @@
 			const PDFLib = await getPdfLib();
 			const doc = await PDFLib.PDFDocument.load(buffer, { ignoreEncryption: true });
 			totalPages = doc.getPageCount();
+
+			docThumbnail = await generateThumbnail(buffer, 1, 160);
 		} catch (err) {
 			console.error('Failed to parse uploaded PDF:', err);
 			toast.show(i18n.t('tools.pdfToImg.toastError'), 'error');
@@ -72,7 +107,9 @@
 		currentFile = null;
 		fileBuffer = null;
 		totalPages = 0;
+		docThumbnail = '';
 		renderedPages = [];
+		lightboxIndex = null;
 	}
 
 	async function executeConversion() {
@@ -218,16 +255,26 @@
 			<!-- Document Card & Settings -->
 			<div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm space-y-4">
 				<div class="flex flex-col sm:flex-row items-center justify-between gap-4 border-b border-slate-100 pb-4">
-					<div class="space-y-1 overflow-hidden w-full sm:w-auto">
-						<h3 class="text-sm font-bold text-slate-900 truncate" title={currentFile.name}>
-							{currentFile.name}
-						</h3>
-						<div class="flex items-center gap-2 text-xs text-slate-500 font-semibold">
-							<span>{formatBytes(currentFile.size)}</span>
-							<span>&bull;</span>
-							<span class="px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-bold border border-purple-100">
-								{i18n.t('tools.mergePdf.pageCount', { count: totalPages })}
-							</span>
+					<div class="flex items-center gap-4 w-full sm:w-auto">
+						<div class="w-16 h-20 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-200 shrink-0">
+							{#if docThumbnail}
+								<img src={docThumbnail} alt={currentFile.name} class="max-w-full max-h-full object-contain" />
+							{:else}
+								<FileText class="w-8 h-8 text-slate-400" />
+							{/if}
+						</div>
+
+						<div class="space-y-1 overflow-hidden">
+							<h3 class="text-sm font-bold text-slate-900 truncate" title={currentFile.name}>
+								{currentFile.name}
+							</h3>
+							<div class="flex items-center gap-2 text-xs text-slate-500 font-semibold">
+								<span>{formatBytes(currentFile.size)}</span>
+								<span>&bull;</span>
+								<span class="px-2 py-0.5 rounded bg-purple-50 text-purple-700 font-bold border border-purple-100">
+									{i18n.t('tools.mergePdf.pageCount', { count: totalPages })}
+								</span>
+							</div>
 						</div>
 					</div>
 
@@ -345,9 +392,20 @@
 					</div>
 
 					<div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-						{#each renderedPages as page}
+						{#each renderedPages as page, idx}
 							<div class="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col justify-between space-y-2 group">
-								<div class="w-full h-44 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-slate-100 relative">
+								<div
+									role="button"
+									tabindex="0"
+									onclick={() => openLightbox(idx)}
+									onkeydown={(e) => {
+										if (e.key === 'Enter' || e.key === ' ') {
+											e.preventDefault();
+											openLightbox(idx);
+										}
+									}}
+									class="w-full h-44 bg-white rounded-lg flex items-center justify-center overflow-hidden border border-slate-100 relative cursor-pointer"
+								>
 									<img
 										src={page.dataUrl}
 										alt="Page {page.pageNum}"
@@ -355,6 +413,9 @@
 									/>
 									<span class="absolute top-2 left-2 px-2 py-0.5 rounded bg-slate-900/80 text-white text-[10px] font-bold">
 										{i18n.t('tools.pdfToImg.pageNumber', { page: page.pageNum })}
+									</span>
+									<span class="absolute top-2 right-2 p-1 rounded-md bg-white/90 text-slate-700 shadow-xs border border-slate-200 opacity-0 group-hover:opacity-100 transition">
+										<ZoomIn class="w-3.5 h-3.5" />
 									</span>
 								</div>
 
@@ -365,7 +426,7 @@
 									<button
 										type="button"
 										onclick={() => downloadSinglePage(page)}
-										class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-md transition"
+										class="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 border border-purple-200 rounded-md transition cursor-pointer"
 									>
 										<Download class="w-3 h-3" />
 										<span>{i18n.t('tools.pdfToImg.downloadPage')}</span>
@@ -433,4 +494,107 @@
 			</div>
 		</div>
 	</div>
+
+	<!-- Fullscreen Image Lightbox Modal -->
+	{#if lightboxIndex !== null && renderedPages[lightboxIndex]}
+		{@const activePage = renderedPages[lightboxIndex]}
+		<div class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+			<div class="bg-white rounded-2xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] flex flex-col">
+				<!-- Header -->
+				<div class="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
+					<div class="flex items-center gap-2">
+						<Eye class="w-4 h-4 text-purple-600" />
+						<h3 class="text-sm font-bold text-slate-900 font-title">
+							{i18n.t('tools.pdfToImg.lightboxTitle')} — Page {activePage.pageNum} of {renderedPages.length}
+						</h3>
+						<span class="text-xs text-slate-500 font-semibold">({formatBytes(activePage.size)})</span>
+					</div>
+
+					<div class="flex items-center gap-3">
+						<!-- Page Nav -->
+						<div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+							<button
+								type="button"
+								disabled={lightboxIndex <= 0}
+								onclick={() => cycleLightbox(-1)}
+								class="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition"
+								title="Previous Page"
+							>
+								<ChevronLeft class="w-4 h-4" />
+							</button>
+							<button
+								type="button"
+								disabled={lightboxIndex >= renderedPages.length - 1}
+								onclick={() => cycleLightbox(1)}
+								class="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition"
+								title="Next Page"
+							>
+								<ChevronRight class="w-4 h-4" />
+							</button>
+						</div>
+
+						<!-- Zoom Controls -->
+						<div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+							<button
+								type="button"
+								onclick={() => (lightboxZoom = Math.max(60, lightboxZoom - 20))}
+								class="p-1 rounded hover:bg-white text-slate-600 transition"
+								title="Zoom Out"
+							>
+								<ZoomOut class="w-3.5 h-3.5" />
+							</button>
+							<span class="text-[10px] font-bold text-slate-600 px-1 select-none">{lightboxZoom}%</span>
+							<button
+								type="button"
+								onclick={() => (lightboxZoom = Math.min(200, lightboxZoom + 20))}
+								class="p-1 rounded hover:bg-white text-slate-600 transition"
+								title="Zoom In"
+							>
+								<ZoomIn class="w-3.5 h-3.5" />
+							</button>
+						</div>
+
+						<button
+							type="button"
+							onclick={closeLightbox}
+							class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+							title="Close"
+						>
+							<X class="w-5 h-5" />
+						</button>
+					</div>
+				</div>
+
+				<!-- Image Display Area -->
+				<div class="w-full flex-1 min-h-[380px] bg-slate-100/80 bg-dot-grid rounded-xl border border-slate-200/80 p-4 flex items-center justify-center overflow-auto shadow-inner">
+					<img
+						src={activePage.dataUrl}
+						alt="Page {activePage.pageNum}"
+						style="transform: scale({lightboxZoom / 100}); transform-origin: center center;"
+						class="max-w-full max-h-[60vh] object-contain rounded shadow bg-white border border-slate-200 transition-transform duration-150"
+					/>
+				</div>
+
+				<!-- Modal Footer -->
+				<div class="flex items-center justify-between pt-2 border-t border-slate-100">
+					<button
+						type="button"
+						onclick={() => downloadSinglePage(activePage)}
+						class="inline-flex items-center gap-1.5 px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-xs transition"
+					>
+						<Download class="w-3.5 h-3.5" />
+						<span>{i18n.t('tools.pdfToImg.downloadPage')} (Page {activePage.pageNum})</span>
+					</button>
+
+					<button
+						type="button"
+						onclick={closeLightbox}
+						class="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+					>
+						Close
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 </div>

@@ -6,6 +6,7 @@
 	import DropZone from '$lib/components/DropZone.svelte';
 	import {
 		getPdfLib,
+		getPdfJs,
 		generateThumbnail,
 		formatBytes,
 		downloadBlob
@@ -21,6 +22,11 @@
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import HelpCircle from '@lucide/svelte/icons/help-circle';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
+	import ZoomIn from '@lucide/svelte/icons/zoom-in';
+	import ZoomOut from '@lucide/svelte/icons/zoom-out';
+	import Eye from '@lucide/svelte/icons/eye';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
 
 	let currentFile = $state<File | null>(null);
@@ -45,6 +51,12 @@
 	let watermarkColor = $state<'gray' | 'red' | 'blue'>('gray');
 	let watermarkRotation = $state<'diagonal' | 'horizontal'>('diagonal');
 
+	// Live Preview State
+	let previewCanvas = $state<HTMLCanvasElement | null>(null);
+	let currentPreviewPage = $state(1);
+	let previewZoom = $state(90);
+	let isRenderingPreview = $state(false);
+
 	let isProcessing = $state(false);
 	let lastSavedUrl = $state('');
 
@@ -58,6 +70,7 @@
 		if (!files || files.length === 0) return;
 		const file = files[0];
 		currentFile = file;
+		currentPreviewPage = 1;
 		if (lastSavedUrl) {
 			URL.revokeObjectURL(lastSavedUrl);
 			lastSavedUrl = '';
@@ -72,6 +85,7 @@
 			totalPages = doc.getPageCount();
 
 			thumbnail = await generateThumbnail(buffer, 1, 160);
+			renderLivePreview();
 		} catch (err) {
 			console.error('Failed to load PDF:', err);
 			toast.show(i18n.t('tools.watermarkPdf.toastError'), 'error');
@@ -88,6 +102,129 @@
 			lastSavedUrl = '';
 		}
 	}
+
+	// Live Canvas Preview Renderer
+	async function renderLivePreview() {
+		if (!fileBuffer || !previewCanvas) return;
+		isRenderingPreview = true;
+
+		try {
+			const pdfjs = await getPdfJs();
+			const doc = await pdfjs.getDocument({ data: fileBuffer }).promise;
+			const page = await doc.getPage(currentPreviewPage);
+
+			const scale = (previewZoom / 100) * 1.1;
+			const viewport = page.getViewport({ scale });
+
+			const canvas = previewCanvas;
+			canvas.width = Math.floor(viewport.width);
+			canvas.height = Math.floor(viewport.height);
+			const ctx = canvas.getContext('2d');
+
+			if (!ctx) {
+				await doc.destroy();
+				return;
+			}
+
+			// 1. Render actual document page
+			await page.render({ canvasContext: ctx, viewport }).promise;
+			await doc.destroy();
+
+			// 2. Overlay live watermark
+			if (enableWatermark && watermarkText.trim()) {
+				ctx.save();
+				ctx.translate(viewport.width / 2, viewport.height / 2);
+				if (watermarkRotation === 'diagonal') {
+					ctx.rotate((-45 * Math.PI) / 180);
+				}
+				ctx.globalAlpha = watermarkOpacity;
+				let color = '#64748b';
+				if (watermarkColor === 'red') color = '#dc2626';
+				else if (watermarkColor === 'blue') color = '#2563eb';
+
+				ctx.fillStyle = color;
+				ctx.font = `bold ${Math.round(watermarkFontSize * scale * 0.9)}px sans-serif`;
+				ctx.textAlign = 'center';
+				ctx.textBaseline = 'middle';
+				ctx.fillText(watermarkText, 0, 0);
+				ctx.restore();
+			}
+
+			// 3. Overlay live page number
+			if (enableNumbers) {
+				ctx.save();
+				ctx.globalAlpha = 0.85;
+				ctx.fillStyle = '#334155';
+				ctx.font = `bold ${Math.round(numberFontSize * scale * 1.1)}px sans-serif`;
+
+				let numText = '';
+				if (numberFormat === 'page_x_of_y') numText = `Page ${currentPreviewPage} of ${totalPages}`;
+				else if (numberFormat === 'simple') numText = `${currentPreviewPage}`;
+				else if (numberFormat === 'dash') numText = `- ${currentPreviewPage} -`;
+
+				const marginX = 25 * scale;
+				const marginY = 25 * scale;
+
+				if (numberPosition === 'bottom_center') {
+					ctx.textAlign = 'center';
+					ctx.fillText(numText, viewport.width / 2, viewport.height - marginY);
+				} else if (numberPosition === 'bottom_right') {
+					ctx.textAlign = 'right';
+					ctx.fillText(numText, viewport.width - marginX, viewport.height - marginY);
+				} else if (numberPosition === 'bottom_left') {
+					ctx.textAlign = 'left';
+					ctx.fillText(numText, marginX, viewport.height - marginY);
+				} else if (numberPosition === 'top_center') {
+					ctx.textAlign = 'center';
+					ctx.fillText(numText, viewport.width / 2, marginY + 10 * scale);
+				} else if (numberPosition === 'top_right') {
+					ctx.textAlign = 'right';
+					ctx.fillText(numText, viewport.width - marginX, marginY + 10 * scale);
+				}
+				ctx.restore();
+			}
+		} catch (err) {
+			console.error('Error rendering live preview:', err);
+		} finally {
+			isRenderingPreview = false;
+		}
+	}
+
+	// Trigger preview refresh on any parameter change
+	$effect(() => {
+		// Track dependencies
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		currentPreviewPage;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		previewZoom;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		enableWatermark;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		watermarkText;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		watermarkOpacity;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		watermarkFontSize;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		watermarkColor;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		watermarkRotation;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		enableNumbers;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		numberFormat;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		numberPosition;
+		// eslint-disable-next-line @typescript-eslint/no-unused-expressions
+		numberFontSize;
+
+		if (fileBuffer && previewCanvas) {
+			const timer = setTimeout(() => {
+				renderLivePreview();
+			}, 120);
+			return () => clearTimeout(timer);
+		}
+	});
 
 	async function executeApply() {
 		if (!currentFile || !fileBuffer) {
@@ -204,7 +341,7 @@
 	description={i18n.t('tools.watermarkPdf.longDescription')}
 />
 
-<div class="space-y-10 max-w-4xl mx-auto">
+<div class="space-y-10 max-w-6xl mx-auto">
 	<!-- Header -->
 	<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-slate-200/80 pb-6">
 		<div class="space-y-1.5">
@@ -245,21 +382,16 @@
 	{:else}
 		<div class="space-y-6">
 			<!-- Document Card -->
-			<div class="bg-white border border-slate-200 rounded-2xl p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
-				<div class="flex items-center gap-4 w-full sm:w-auto">
-					<div class="w-16 h-20 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-200 shrink-0">
-						{#if thumbnail}
-							<img src={thumbnail} alt={currentFile.name} class="max-w-full max-h-full object-contain" />
-						{:else}
-							<FileText class="w-8 h-8 text-slate-400" />
-						{/if}
+			<div class="bg-white border border-slate-200 rounded-2xl p-4 sm:p-5 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-4">
+				<div class="flex items-center gap-3 w-full sm:w-auto">
+					<div class="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0 border border-blue-100">
+						<FileText class="w-5 h-5" />
 					</div>
-
-					<div class="space-y-1 overflow-hidden">
-						<h3 class="text-sm font-bold text-slate-900 truncate" title={currentFile.name}>
+					<div class="space-y-0.5 overflow-hidden">
+						<h3 class="text-xs sm:text-sm font-bold text-slate-900 truncate max-w-md" title={currentFile.name}>
 							{currentFile.name}
 						</h3>
-						<div class="flex items-center gap-2 text-xs text-slate-500 font-semibold">
+						<div class="flex items-center gap-2 text-[11px] text-slate-500 font-semibold">
 							<span>{formatBytes(currentFile.size)}</span>
 							<span>&bull;</span>
 							<span class="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-bold border border-blue-100">
@@ -272,143 +404,162 @@
 				<button
 					type="button"
 					onclick={clearFile}
-					class="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition"
+					class="self-end sm:self-auto inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition"
 				>
 					<Trash2 class="w-3.5 h-3.5" />
 					<span>{i18n.t('tools.mergePdf.remove')}</span>
 				</button>
 			</div>
 
-			<!-- Options Tabs -->
-			<div class="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
-				<!-- Tab Navigation -->
-				<div class="flex border-b border-slate-200">
-					<button
-						type="button"
-						onclick={() => (activeTab = 'numbers')}
-						class="flex items-center gap-2 px-5 py-3 text-xs font-bold border-b-2 transition -mb-px {activeTab === 'numbers'
-							? 'border-blue-600 text-blue-600'
-							: 'border-transparent text-slate-500 hover:text-slate-800'}"
-					>
-						<Hash class="w-4 h-4" />
-						<span>{i18n.t('tools.watermarkPdf.tabNumbers')}</span>
-					</button>
+			<!-- Workspace 2-Column: Left (Settings) & Right (Live Preview) -->
+			<div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+				<!-- Left Column: Controls (5 cols) -->
+				<div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+					<!-- Tab Navigation -->
+					<div class="flex border-b border-slate-200">
+						<button
+							type="button"
+							onclick={() => (activeTab = 'numbers')}
+							class="flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px cursor-pointer {activeTab === 'numbers'
+								? 'border-blue-600 text-blue-600'
+								: 'border-transparent text-slate-500 hover:text-slate-800'}"
+						>
+							<Hash class="w-4 h-4" />
+							<span>{i18n.t('tools.watermarkPdf.tabNumbers')}</span>
+						</button>
 
-					<button
-						type="button"
-						onclick={() => (activeTab = 'watermark')}
-						class="flex items-center gap-2 px-5 py-3 text-xs font-bold border-b-2 transition -mb-px {activeTab === 'watermark'
-							? 'border-blue-600 text-blue-600'
-							: 'border-transparent text-slate-500 hover:text-slate-800'}"
-					>
-						<Stamp class="w-4 h-4" />
-						<span>{i18n.t('tools.watermarkPdf.tabWatermark')}</span>
-					</button>
-				</div>
-
-				<!-- Tab 1: Page Numbers -->
-				{#if activeTab === 'numbers'}
-					<div class="space-y-5">
-						<label class="flex items-center gap-3 cursor-pointer select-none">
-							<input
-								type="checkbox"
-								bind:checked={enableNumbers}
-								class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-							/>
-							<span class="text-xs font-bold text-slate-900">Enable Page Numbering</span>
-						</label>
-
-						{#if enableNumbers}
-							<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-								<!-- Number format -->
-								<div>
-									<label for="format-select" class="block text-xs font-bold text-slate-700 mb-1.5">
-										{i18n.t('tools.watermarkPdf.formatLabel')}
-									</label>
-									<select
-										id="format-select"
-										bind:value={numberFormat}
-										class="w-full text-xs font-semibold px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-									>
-										<option value="page_x_of_y">{i18n.t('tools.watermarkPdf.formatPageXofY')}</option>
-										<option value="simple">{i18n.t('tools.watermarkPdf.formatSimple')}</option>
-										<option value="dash">{i18n.t('tools.watermarkPdf.formatDash')}</option>
-									</select>
-								</div>
-
-								<!-- Number position -->
-								<div>
-									<label for="position-select" class="block text-xs font-bold text-slate-700 mb-1.5">
-										{i18n.t('tools.watermarkPdf.positionLabel')}
-									</label>
-									<select
-										id="position-select"
-										bind:value={numberPosition}
-										class="w-full text-xs font-semibold px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-									>
-										<option value="bottom_center">{i18n.t('tools.watermarkPdf.posBottomCenter')}</option>
-										<option value="bottom_right">{i18n.t('tools.watermarkPdf.posBottomRight')}</option>
-										<option value="bottom_left">{i18n.t('tools.watermarkPdf.posBottomLeft')}</option>
-										<option value="top_center">{i18n.t('tools.watermarkPdf.posTopCenter')}</option>
-										<option value="top_right">{i18n.t('tools.watermarkPdf.posTopRight')}</option>
-									</select>
-								</div>
-							</div>
-						{/if}
+						<button
+							type="button"
+							onclick={() => (activeTab = 'watermark')}
+							class="flex items-center gap-2 px-4 py-2.5 text-xs font-bold border-b-2 transition -mb-px cursor-pointer {activeTab === 'watermark'
+								? 'border-blue-600 text-blue-600'
+								: 'border-transparent text-slate-500 hover:text-slate-800'}"
+						>
+							<Stamp class="w-4 h-4" />
+							<span>{i18n.t('tools.watermarkPdf.tabWatermark')}</span>
+						</button>
 					</div>
-				{/if}
 
-				<!-- Tab 2: Watermark Text -->
-				{#if activeTab === 'watermark'}
-					<div class="space-y-5">
-						<label class="flex items-center gap-3 cursor-pointer select-none">
-							<input
-								type="checkbox"
-								bind:checked={enableWatermark}
-								class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-							/>
-							<span class="text-xs font-bold text-slate-900">Enable Watermark Stamp</span>
-						</label>
+					<!-- Tab 1: Page Numbers -->
+					{#if activeTab === 'numbers'}
+						<div class="space-y-4">
+							<label class="flex items-center gap-2.5 cursor-pointer select-none">
+								<input
+									type="checkbox"
+									bind:checked={enableNumbers}
+									class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+								/>
+								<span class="text-xs font-bold text-slate-900">Enable Page Numbering</span>
+							</label>
 
-						{#if enableWatermark}
-							<div class="space-y-4 pt-2">
-								<div>
-									<label for="wm-text" class="block text-xs font-bold text-slate-700 mb-1">
-										{i18n.t('tools.watermarkPdf.watermarkTextLabel')}
-									</label>
-									<input
-										id="wm-text"
-										type="text"
-										bind:value={watermarkText}
-										placeholder={i18n.t('tools.watermarkPdf.watermarkPlaceholder')}
-										class="w-full text-xs font-semibold px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-									/>
-								</div>
-
-								<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+							{#if enableNumbers}
+								<div class="space-y-3.5 pt-1">
+									<!-- Number format -->
 									<div>
-										<label for="wm-color" class="block text-xs font-bold text-slate-700 mb-1">Color</label>
+										<label for="format-select" class="block text-xs font-bold text-slate-700 mb-1">
+											{i18n.t('tools.watermarkPdf.formatLabel')}
+										</label>
 										<select
-											id="wm-color"
-											bind:value={watermarkColor}
+											id="format-select"
+											bind:value={numberFormat}
 											class="w-full text-xs font-semibold px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
 										>
-											<option value="gray">Subtle Gray</option>
-											<option value="red">Warning Red</option>
-											<option value="blue">Corporate Blue</option>
+											<option value="page_x_of_y">{i18n.t('tools.watermarkPdf.formatPageXofY')}</option>
+											<option value="simple">{i18n.t('tools.watermarkPdf.formatSimple')}</option>
+											<option value="dash">{i18n.t('tools.watermarkPdf.formatDash')}</option>
 										</select>
 									</div>
 
+									<!-- Number position -->
 									<div>
-										<label for="wm-rotation" class="block text-xs font-bold text-slate-700 mb-1">Rotation</label>
+										<label for="position-select" class="block text-xs font-bold text-slate-700 mb-1">
+											{i18n.t('tools.watermarkPdf.positionLabel')}
+										</label>
 										<select
-											id="wm-rotation"
-											bind:value={watermarkRotation}
+											id="position-select"
+											bind:value={numberPosition}
 											class="w-full text-xs font-semibold px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
 										>
-											<option value="diagonal">Diagonal (45&deg;)</option>
-											<option value="horizontal">Horizontal (0&deg;)</option>
+											<option value="bottom_center">{i18n.t('tools.watermarkPdf.posBottomCenter')}</option>
+											<option value="bottom_right">{i18n.t('tools.watermarkPdf.posBottomRight')}</option>
+											<option value="bottom_left">{i18n.t('tools.watermarkPdf.posBottomLeft')}</option>
+											<option value="top_center">{i18n.t('tools.watermarkPdf.posTopCenter')}</option>
+											<option value="top_right">{i18n.t('tools.watermarkPdf.posTopRight')}</option>
 										</select>
+									</div>
+
+									<!-- Font Size -->
+									<div>
+										<label for="num-size" class="block text-xs font-bold text-slate-700 mb-1">
+											{i18n.t('tools.watermarkPdf.fontSizeLabel')}: {numberFontSize}pt
+										</label>
+										<input
+											id="num-size"
+											type="range"
+											min="8"
+											max="18"
+											step="1"
+											bind:value={numberFontSize}
+											class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+										/>
+									</div>
+								</div>
+							{/if}
+						</div>
+					{/if}
+
+					<!-- Tab 2: Watermark Text -->
+					{#if activeTab === 'watermark'}
+						<div class="space-y-4">
+							<label class="flex items-center gap-2.5 cursor-pointer select-none">
+								<input
+									type="checkbox"
+									bind:checked={enableWatermark}
+									class="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
+								/>
+								<span class="text-xs font-bold text-slate-900">Enable Watermark Stamp</span>
+							</label>
+
+							{#if enableWatermark}
+								<div class="space-y-3.5 pt-1">
+									<div>
+										<label for="wm-text" class="block text-xs font-bold text-slate-700 mb-1">
+											{i18n.t('tools.watermarkPdf.watermarkTextLabel')}
+										</label>
+										<input
+											id="wm-text"
+											type="text"
+											bind:value={watermarkText}
+											placeholder={i18n.t('tools.watermarkPdf.watermarkPlaceholder')}
+											class="w-full text-xs font-semibold px-3 py-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+										/>
+									</div>
+
+									<div class="grid grid-cols-2 gap-3">
+										<div>
+											<label for="wm-color" class="block text-xs font-bold text-slate-700 mb-1">Color</label>
+											<select
+												id="wm-color"
+												bind:value={watermarkColor}
+												class="w-full text-xs font-semibold px-2.5 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+											>
+												<option value="gray">Subtle Gray</option>
+												<option value="red">Warning Red</option>
+												<option value="blue">Corporate Blue</option>
+											</select>
+										</div>
+
+										<div>
+											<label for="wm-rotation" class="block text-xs font-bold text-slate-700 mb-1">Rotation</label>
+											<select
+												id="wm-rotation"
+												bind:value={watermarkRotation}
+												class="w-full text-xs font-semibold px-2.5 py-1.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+											>
+												<option value="diagonal">Diagonal (45&deg;)</option>
+												<option value="horizontal">Horizontal (0&deg;)</option>
+											</select>
+										</div>
 									</div>
 
 									<div>
@@ -422,49 +573,137 @@
 											max="0.8"
 											step="0.05"
 											bind:value={watermarkOpacity}
-											class="w-full h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600 mt-2"
+											class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
+										/>
+									</div>
+
+									<div>
+										<label for="wm-size" class="block text-xs font-bold text-slate-700 mb-1">
+											{i18n.t('tools.watermarkPdf.fontSizeLabel')}: {watermarkFontSize}pt
+										</label>
+										<input
+											id="wm-size"
+											type="range"
+											min="20"
+											max="72"
+											step="2"
+											bind:value={watermarkFontSize}
+											class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600"
 										/>
 									</div>
 								</div>
-							</div>
-						{/if}
-					</div>
-				{/if}
+							{/if}
+						</div>
+					{/if}
 
-				<!-- Action Bottom -->
-				<div class="flex items-center justify-end border-t border-slate-100 pt-5">
-					<button
-						type="button"
-						disabled={isProcessing}
-						onclick={executeApply}
-						class="inline-flex items-center justify-center gap-2 px-6 py-3 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 active:scale-[0.98] rounded-xl shadow-sm hover:shadow-glow-blue disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
-					>
-						{#if isProcessing}
-							<Loader2 class="w-4 h-4 animate-spin" />
-							<span>{i18n.t('tools.watermarkPdf.applying')}</span>
-						{:else}
-							<Sparkles class="w-4 h-4" />
-							<span>{i18n.t('tools.watermarkPdf.applyBtn')}</span>
-						{/if}
-					</button>
+					<!-- Action Bottom -->
+					<div class="border-t border-slate-100 pt-5">
+						<button
+							type="button"
+							disabled={isProcessing}
+							onclick={executeApply}
+							class="w-full inline-flex items-center justify-center gap-2 px-6 py-3 text-xs sm:text-sm font-bold text-white bg-blue-600 hover:bg-blue-500 active:scale-[0.98] rounded-xl shadow-sm hover:shadow-glow-blue disabled:opacity-50 disabled:cursor-not-allowed transition cursor-pointer"
+						>
+							{#if isProcessing}
+								<Loader2 class="w-4 h-4 animate-spin" />
+								<span>{i18n.t('tools.watermarkPdf.applying')}</span>
+							{:else}
+								<Sparkles class="w-4 h-4" />
+								<span>{i18n.t('tools.watermarkPdf.applyBtn')}</span>
+							{/if}
+						</button>
+					</div>
+
+					{#if lastSavedUrl}
+						<div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
+							<div class="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+								<CheckCircle2 class="w-4 h-4 text-emerald-600" />
+								<span>Saved!</span>
+							</div>
+							<a
+								href={lastSavedUrl}
+								download={`${currentFile.name.replace(/\.pdf$/i, '')}_stamped.pdf`}
+								class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition"
+							>
+								<Download class="w-3.5 h-3.5" />
+								<span>Download</span>
+							</a>
+						</div>
+					{/if}
 				</div>
 
-				{#if lastSavedUrl}
-					<div class="p-3 bg-emerald-50 border border-emerald-200 rounded-xl flex items-center justify-between">
-						<div class="flex items-center gap-2 text-xs font-bold text-emerald-800">
-							<CheckCircle2 class="w-4 h-4 text-emerald-600" />
-							<span>{i18n.t('tools.watermarkPdf.successTitle')}</span>
+				<!-- Right Column: Live Interactive Document Preview (7 cols) -->
+				<div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+					<!-- Preview Header & Navigation -->
+					<div class="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
+						<div class="flex items-center gap-2">
+							<Eye class="w-4 h-4 text-blue-600" />
+							<span class="text-xs font-bold text-slate-800">Live Document Preview</span>
 						</div>
-						<a
-							href={lastSavedUrl}
-							download={`${currentFile.name.replace(/\.pdf$/i, '')}_stamped.pdf`}
-							class="inline-flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-xs transition"
-						>
-							<Download class="w-3.5 h-3.5" />
-							<span>{i18n.t('tools.watermarkPdf.downloadBtn')}</span>
-						</a>
+
+						<div class="flex items-center gap-3">
+							<!-- Page Navigation -->
+							<div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+								<button
+									type="button"
+									disabled={currentPreviewPage <= 1}
+									onclick={() => (currentPreviewPage = Math.max(1, currentPreviewPage - 1))}
+									class="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition"
+									title="Previous Page"
+								>
+									<ChevronLeft class="w-3.5 h-3.5" />
+								</button>
+								<span class="text-[11px] font-bold text-slate-700 px-2 select-none">
+									{currentPreviewPage} / {totalPages}
+								</span>
+								<button
+									type="button"
+									disabled={currentPreviewPage >= totalPages}
+									onclick={() => (currentPreviewPage = Math.min(totalPages, currentPreviewPage + 1))}
+									class="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition"
+									title="Next Page"
+								>
+									<ChevronRight class="w-3.5 h-3.5" />
+								</button>
+							</div>
+
+							<!-- Zoom Controls -->
+							<div class="flex items-center gap-1 bg-slate-50 border border-slate-200 rounded-lg p-0.5">
+								<button
+									type="button"
+									onclick={() => (previewZoom = Math.max(50, previewZoom - 15))}
+									class="p-1 rounded hover:bg-white text-slate-600 transition"
+									title="Zoom Out"
+								>
+									<ZoomOut class="w-3.5 h-3.5" />
+								</button>
+								<span class="text-[10px] font-bold text-slate-600 px-1 select-none">{previewZoom}%</span>
+								<button
+									type="button"
+									onclick={() => (previewZoom = Math.min(150, previewZoom + 15))}
+									class="p-1 rounded hover:bg-white text-slate-600 transition"
+									title="Zoom In"
+								>
+									<ZoomIn class="w-3.5 h-3.5" />
+								</button>
+							</div>
+						</div>
 					</div>
-				{/if}
+
+					<!-- Visual Document Canvas Container -->
+					<div class="w-full min-h-[460px] max-h-[580px] bg-slate-100/70 bg-dot-grid rounded-xl border border-slate-200/80 p-4 flex items-center justify-center overflow-auto relative shadow-inner">
+						{#if isRenderingPreview}
+							<div class="absolute inset-0 bg-white/70 backdrop-blur-[1px] flex items-center justify-center z-10">
+								<Loader2 class="w-6 h-6 text-blue-600 animate-spin" />
+							</div>
+						{/if}
+
+						<canvas
+							bind:this={previewCanvas}
+							class="max-w-full rounded shadow-md bg-white border border-slate-200 transition-all duration-200"
+						></canvas>
+					</div>
+				</div>
 			</div>
 		</div>
 	{/if}

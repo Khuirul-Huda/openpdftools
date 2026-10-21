@@ -7,6 +7,7 @@
 	import {
 		getPdfLib,
 		generateThumbnail,
+		generateBatchThumbnails,
 		formatBytes,
 		downloadBlob
 	} from '$lib/utils/pdf-helper';
@@ -23,6 +24,8 @@
 	import HelpCircle from '@lucide/svelte/icons/help-circle';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
 	import Download from '@lucide/svelte/icons/download';
+	import Eye from '@lucide/svelte/icons/eye';
+	import X from '@lucide/svelte/icons/x';
 
 	interface PdfItem {
 		id: string;
@@ -40,6 +43,30 @@
 	let outputFileName = $state('merged_document.pdf');
 	let lastMergedUrl = $state('');
 	let addMoreInput = $state<HTMLInputElement | null>(null);
+
+	// Document Inspector State
+	let inspectingItem = $state<PdfItem | null>(null);
+	let inspectingThumbnails = $state<Record<number, string>>({});
+	let isLoadingInspectThumbs = $state(false);
+
+	async function openInspectModal(item: PdfItem) {
+		inspectingItem = item;
+		inspectingThumbnails = {};
+		isLoadingInspectThumbs = true;
+		const buffer = item.buffer || (await item.file.arrayBuffer());
+		const pageNums = Array.from({ length: item.pages }, (_, i) => i + 1);
+		if (item.thumbnail) inspectingThumbnails[1] = item.thumbnail;
+		generateBatchThumbnails(buffer, pageNums, 150, (pageNum, url) => {
+			inspectingThumbnails[pageNum] = url;
+		}).finally(() => {
+			isLoadingInspectThumbs = false;
+		});
+	}
+
+	function closeInspectModal() {
+		inspectingItem = null;
+		inspectingThumbnails = {};
+	}
 
 	// FAQs Accordion State
 	let faqOpen = $state<Record<string, boolean>>({ q1: false, q2: false });
@@ -319,6 +346,15 @@
 								</span>
 							</div>
 						</div>
+
+						<button
+							type="button"
+							onclick={() => openInspectModal(item)}
+							class="w-full mt-2.5 inline-flex items-center justify-center gap-1.5 px-2.5 py-1.5 text-[11px] font-bold text-slate-600 bg-slate-50 hover:bg-blue-50 hover:text-blue-600 border border-slate-200 rounded-lg transition cursor-pointer"
+						>
+							<Eye class="w-3.5 h-3.5" />
+							<span>{i18n.t('tools.mergePdf.inspectBtn')}</span>
+						</button>
 					</div>
 				{/each}
 			</div>
@@ -431,4 +467,71 @@
 			</div>
 		</div>
 	</div>
+
+	<!-- Document Page Inspector Modal -->
+	{#if inspectingItem}
+		<div class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+			<div class="bg-white rounded-2xl max-w-3xl w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+				<!-- Header -->
+				<div class="flex items-center justify-between border-b border-slate-100 pb-3">
+					<div class="flex items-center gap-2 overflow-hidden">
+						<Eye class="w-4 h-4 text-blue-600 shrink-0" />
+						<h3 class="text-sm font-bold text-slate-900 truncate" title={inspectingItem.name}>
+							{inspectingItem.name} ({inspectingItem.pages} pages)
+						</h3>
+						{#if isLoadingInspectThumbs}
+							<Loader2 class="w-3.5 h-3.5 text-blue-500 animate-spin shrink-0" />
+						{/if}
+					</div>
+
+					<button
+						type="button"
+						onclick={closeInspectModal}
+						class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+						title="Close"
+					>
+						<X class="w-5 h-5" />
+					</button>
+				</div>
+
+				<!-- Page Thumbnails Grid -->
+				<div class="flex-1 overflow-y-auto max-h-[60vh] p-2 bg-slate-50/70 rounded-xl border border-slate-200/80">
+					<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+						{#each Array.from({ length: inspectingItem.pages }, (_, i) => i + 1) as pageNum}
+							<div class="bg-white border border-slate-200 rounded-xl p-2.5 flex flex-col justify-between shadow-xs">
+								<div class="w-full h-36 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-100 mb-2">
+									{#if inspectingThumbnails[pageNum]}
+										<img
+											src={inspectingThumbnails[pageNum]}
+											alt="Page {pageNum}"
+											class="max-w-full max-h-full object-contain"
+										/>
+									{:else}
+										<div class="flex flex-col items-center gap-1 text-slate-400">
+											<Loader2 class="w-4 h-4 animate-spin text-slate-400" />
+											<span class="text-[10px] font-semibold">P.{pageNum}</span>
+										</div>
+									{/if}
+								</div>
+								<div class="text-center">
+									<span class="text-xs font-bold text-slate-700">Page {pageNum}</span>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+
+				<!-- Footer -->
+				<div class="flex justify-end pt-2 border-t border-slate-100">
+					<button
+						type="button"
+						onclick={closeInspectModal}
+						class="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+					>
+						{i18n.t('tools.mergePdf.inspectClose')}
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 </div>

@@ -20,9 +20,15 @@
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import HelpCircle from '@lucide/svelte/icons/help-circle';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Download from '@lucide/svelte/icons/download';
 	import Sliders from '@lucide/svelte/icons/sliders';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
+	import Eye from '@lucide/svelte/icons/eye';
+	import ZoomIn from '@lucide/svelte/icons/zoom-in';
+	import ZoomOut from '@lucide/svelte/icons/zoom-out';
+	import X from '@lucide/svelte/icons/x';
 
 	interface ImageItem {
 		id: string;
@@ -38,6 +44,29 @@
 	let pageSize = $state<'a4' | 'letter' | 'fit'>('a4');
 	let orientation = $state<'auto' | 'portrait' | 'landscape'>('auto');
 	let margin = $state<'none' | 'small' | 'big'>('small');
+
+	// Preview State
+	let inspectedImageIndex = $state<number | null>(null);
+	let previewActiveIndex = $state(0);
+	let lightboxZoom = $state(100);
+
+	function openImageLightbox(index: number) {
+		inspectedImageIndex = index;
+		lightboxZoom = 100;
+	}
+
+	function closeImageLightbox() {
+		inspectedImageIndex = null;
+		lightboxZoom = 100;
+	}
+
+	function cycleImageLightbox(delta: number) {
+		if (inspectedImageIndex === null) return;
+		const next = inspectedImageIndex + delta;
+		if (next >= 0 && next < images.length) {
+			inspectedImageIndex = next;
+		}
+	}
 
 	let isProcessing = $state(false);
 	let progress = $state({ current: 0, total: 0 });
@@ -364,8 +393,22 @@
 							</button>
 						</div>
 
-						<div class="w-full h-32 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden mb-2 border border-slate-100">
+						<div
+							role="button"
+							tabindex="0"
+							onclick={() => openImageLightbox(index)}
+							onkeydown={(e) => {
+								if (e.key === 'Enter' || e.key === ' ') {
+									e.preventDefault();
+									openImageLightbox(index);
+								}
+							}}
+							class="w-full h-32 bg-slate-50 rounded-lg flex items-center justify-center overflow-hidden mb-2 border border-slate-100 relative cursor-pointer"
+						>
 							<img src={item.url} alt={item.name} class="max-w-full max-h-full object-contain group-hover:scale-105 transition-transform" />
+							<span class="absolute bottom-1 right-1 p-1 rounded-md bg-white/90 text-slate-700 shadow-xs border border-slate-200 opacity-0 group-hover:opacity-100 transition">
+								<ZoomIn class="w-3 h-3" />
+							</span>
 						</div>
 
 						<div class="space-y-0.5">
@@ -491,6 +534,83 @@
 					</div>
 				</div>
 
+				<!-- Live Virtual Sheet Preview -->
+				{#if images.length > 0}
+					{@const activeImg = images[previewActiveIndex] || images[0]}
+					{@const isLandscape = orientation === 'landscape' || (orientation === 'auto' && activeImg && activeImg.width > activeImg.height)}
+					{@const paperRatio = pageSize === 'fit' ? (activeImg ? activeImg.width / activeImg.height : 1) : (pageSize === 'letter' ? (isLandscape ? 792 / 612 : 612 / 792) : (isLandscape ? 842 / 595 : 595 / 842))}
+					{@const marginPadding = margin === 'none' ? '0px' : margin === 'big' ? '22px' : '12px'}
+
+					<div class="border-t border-slate-100 pt-5 space-y-3">
+						<div class="flex items-center justify-between flex-wrap gap-2">
+							<div class="flex items-center gap-2">
+								<Eye class="w-4 h-4 text-amber-600" />
+								<div>
+									<h4 class="text-xs font-bold text-slate-800">
+										{i18n.t('tools.imgToPdf.layoutPreview')}
+									</h4>
+									<p class="text-[10px] text-slate-400">
+										{i18n.t('tools.imgToPdf.layoutSubtitle')}
+									</p>
+								</div>
+							</div>
+
+							<!-- Image Selector in Preview -->
+							{#if images.length > 1}
+								<div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+									<button
+										type="button"
+										disabled={previewActiveIndex <= 0}
+										onclick={() => (previewActiveIndex = Math.max(0, previewActiveIndex - 1))}
+										class="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition"
+										title="Previous Image"
+									>
+										<ChevronLeft class="w-3.5 h-3.5" />
+									</button>
+									<span class="text-[11px] font-bold text-slate-700 px-2 select-none">
+										{previewActiveIndex + 1} / {images.length}
+									</span>
+									<button
+										type="button"
+										disabled={previewActiveIndex >= images.length - 1}
+										onclick={() => (previewActiveIndex = Math.min(images.length - 1, previewActiveIndex + 1))}
+										class="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition"
+										title="Next Image"
+									>
+										<ChevronRight class="w-3.5 h-3.5" />
+									</button>
+								</div>
+							{/if}
+						</div>
+
+						<!-- Realistic Virtual Paper Sheet on Canvas Background -->
+						<div class="w-full bg-slate-100/70 bg-dot-grid rounded-xl border border-slate-200/80 p-6 flex flex-col items-center justify-center min-h-[360px] overflow-hidden shadow-inner">
+							<div
+								style="aspect-ratio: {paperRatio}; width: {isLandscape ? '340px' : '240px'}; padding: {marginPadding};"
+								class="bg-white rounded shadow-md border border-slate-300 flex items-center justify-center relative transition-all duration-300"
+							>
+								<!-- Guideline dashes for margin -->
+								{#if margin !== 'none'}
+									<div
+										class="absolute inset-0 pointer-events-none border border-dashed border-amber-300/80 rounded"
+										style="margin: {marginPadding};"
+									></div>
+								{/if}
+
+								<img
+									src={activeImg.url}
+									alt={activeImg.name}
+									class="max-w-full max-h-full object-contain shadow-xs select-none"
+								/>
+							</div>
+
+							<div class="mt-3 text-[11px] font-bold text-slate-500 text-center">
+								Sheet: {pageSize.toUpperCase()} ({isLandscape ? 'Landscape' : 'Portrait'}) • Margin: {margin} • {activeImg.name} ({activeImg.width} × {activeImg.height}px)
+							</div>
+						</div>
+					</div>
+				{/if}
+
 				<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-t border-slate-100 pt-5">
 					<div class="flex-1 max-w-sm">
 						<input
@@ -591,4 +711,107 @@
 			</div>
 		</div>
 	</div>
+
+	<!-- Source Image Lightbox Modal -->
+	{#if inspectedImageIndex !== null && images[inspectedImageIndex]}
+		{@const inspectedImg = images[inspectedImageIndex]}
+		<div class="fixed inset-0 z-50 bg-slate-950/80 backdrop-blur-xs flex items-center justify-center p-4">
+			<div class="bg-white rounded-2xl max-w-4xl w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[92vh] flex flex-col">
+				<!-- Header -->
+				<div class="flex items-center justify-between border-b border-slate-100 pb-3 flex-wrap gap-2">
+					<div class="flex items-center gap-2 overflow-hidden">
+						<Eye class="w-4 h-4 text-amber-600 shrink-0" />
+						<h3 class="text-sm font-bold text-slate-900 truncate" title={inspectedImg.name}>
+							{i18n.t('tools.imgToPdf.enlargeImage')} — {inspectedImg.name}
+						</h3>
+						<span class="text-xs text-slate-500 font-semibold shrink-0">
+							({inspectedImg.width} × {inspectedImg.height}px, {formatBytes(inspectedImg.size)})
+						</span>
+					</div>
+
+					<div class="flex items-center gap-3">
+						<!-- Page Nav -->
+						<div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+							<button
+								type="button"
+								disabled={inspectedImageIndex <= 0}
+								onclick={() => cycleImageLightbox(-1)}
+								class="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+								title="Previous Image"
+							>
+								<ChevronLeft class="w-4 h-4" />
+							</button>
+							<span class="text-[11px] font-bold text-slate-700 px-2 select-none">
+								{inspectedImageIndex + 1} / {images.length}
+							</span>
+							<button
+								type="button"
+								disabled={inspectedImageIndex >= images.length - 1}
+								onclick={() => cycleImageLightbox(1)}
+								class="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition cursor-pointer"
+								title="Next Image"
+							>
+								<ChevronRight class="w-4 h-4" />
+							</button>
+						</div>
+
+						<!-- Zoom Controls -->
+						<div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+							<button
+								type="button"
+								onclick={() => (lightboxZoom = Math.max(60, lightboxZoom - 20))}
+								class="p-1 rounded hover:bg-white text-slate-600 transition cursor-pointer"
+								title="Zoom Out"
+							>
+								<ZoomOut class="w-3.5 h-3.5" />
+							</button>
+							<span class="text-[10px] font-bold text-slate-600 px-1 select-none">{lightboxZoom}%</span>
+							<button
+								type="button"
+								onclick={() => (lightboxZoom = Math.min(200, lightboxZoom + 20))}
+								class="p-1 rounded hover:bg-white text-slate-600 transition cursor-pointer"
+								title="Zoom In"
+							>
+								<ZoomIn class="w-3.5 h-3.5" />
+							</button>
+						</div>
+
+						<button
+							type="button"
+							onclick={closeImageLightbox}
+							class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition cursor-pointer"
+							title="Close"
+						>
+							<X class="w-5 h-5" />
+						</button>
+					</div>
+				</div>
+
+				<!-- Image Display Area -->
+				<div class="w-full flex-1 min-h-[380px] bg-slate-100/80 bg-dot-grid rounded-xl border border-slate-200/80 p-4 flex items-center justify-center overflow-auto shadow-inner">
+					<img
+						src={inspectedImg.url}
+						alt={inspectedImg.name}
+						style="transform: scale({lightboxZoom / 100}); transform-origin: center center;"
+						class="max-w-full max-h-[60vh] object-contain rounded shadow bg-white border border-slate-200 transition-transform duration-150 select-none"
+					/>
+				</div>
+
+				<!-- Modal Footer -->
+				<div class="flex items-center justify-between pt-2 border-t border-slate-100">
+					<span class="text-xs text-slate-500 font-medium">
+						Image {inspectedImageIndex + 1} of {images.length}
+					</span>
+
+					<button
+						type="button"
+						onclick={closeImageLightbox}
+						class="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
+					>
+						Close
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 </div>

@@ -167,3 +167,43 @@ export async function generateThumbnail(data: ArrayBuffer | Uint8Array, pageNum 
 		return '';
 	}
 }
+
+export async function generateBatchThumbnails(
+	data: ArrayBuffer | Uint8Array,
+	pageNums: number[],
+	maxWidth = 160,
+	onProgress?: (pageNum: number, dataUrl: string) => void
+): Promise<Map<number, string>> {
+	const result = new Map<number, string>();
+	try {
+		const pdfjs = await getPdfJs();
+		const doc = await pdfjs.getDocument({ data }).promise;
+		for (const pageNum of pageNums) {
+			try {
+				const page = await doc.getPage(pageNum);
+				const unscaledViewport = page.getViewport({ scale: 1 });
+				const scale = maxWidth / unscaledViewport.width;
+				const viewport = page.getViewport({ scale });
+
+				const canvas = document.createElement('canvas');
+				canvas.width = Math.floor(viewport.width);
+				canvas.height = Math.floor(viewport.height);
+				const ctx = canvas.getContext('2d');
+				if (ctx) {
+					await page.render({ canvasContext: ctx, viewport }).promise;
+					const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+					result.set(pageNum, dataUrl);
+					onProgress?.(pageNum, dataUrl);
+				}
+			} catch (err) {
+				console.warn(`Error generating thumbnail for page ${pageNum}:`, err);
+			}
+			// Small yield to let UI remain silky smooth and prevent CPU hogging
+			await new Promise((r) => setTimeout(r, 10));
+		}
+		await doc.destroy();
+	} catch (e) {
+		console.warn('Failed to generate batch thumbnails:', e);
+	}
+	return result;
+}

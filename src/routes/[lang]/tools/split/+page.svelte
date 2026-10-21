@@ -8,6 +8,7 @@
 		getPdfLib,
 		getJSZip,
 		generateThumbnail,
+		generateBatchThumbnails,
 		parsePageRanges,
 		formatBytes,
 		downloadBlob
@@ -23,12 +24,25 @@
 	import ShieldCheck from '@lucide/svelte/icons/shield-check';
 	import HelpCircle from '@lucide/svelte/icons/help-circle';
 	import ChevronDown from '@lucide/svelte/icons/chevron-down';
+	import ChevronLeft from '@lucide/svelte/icons/chevron-left';
+	import ChevronRight from '@lucide/svelte/icons/chevron-right';
 	import Sparkles from '@lucide/svelte/icons/sparkles';
+	import Eye from '@lucide/svelte/icons/eye';
+	import ZoomIn from '@lucide/svelte/icons/zoom-in';
+	import Check from '@lucide/svelte/icons/check';
+	import X from '@lucide/svelte/icons/x';
 
 	let currentFile = $state<File | null>(null);
 	let fileBuffer = $state<ArrayBuffer | null>(null);
 	let totalPages = $state(0);
 	let thumbnail = $state('');
+
+	// Visual Page Grid & Preview State
+	let pageThumbnails = $state<Record<number, string>>({});
+	let isLoadingThumbnails = $state(false);
+	let inspectedPage = $state<number | null>(null);
+	let inspectedHighResUrl = $state('');
+	let isLoadingHighRes = $state(false);
 
 	// Split Options
 	let splitMode = $state<'ranges' | 'all'>('ranges');
@@ -55,10 +69,103 @@
 		return parsePageRanges(rangeInput, totalPages);
 	});
 
+	// Check if a 1-based page number is in any range
+	function getPageRangeBadge(pageNum: number): { isSelected: boolean; rangeIndex: number } {
+		const pageIdx = pageNum - 1;
+		for (let r = 0; r < parsedRanges.length; r++) {
+			if (parsedRanges[r].includes(pageIdx)) {
+				return { isSelected: true, rangeIndex: r + 1 };
+			}
+		}
+		return { isSelected: false, rangeIndex: 0 };
+	}
+
+	function numbersToRangeString(nums: number[]): string {
+		if (nums.length === 0) return '';
+		const sorted = Array.from(new Set(nums)).sort((a, b) => a - b);
+		const ranges: string[] = [];
+		let start = sorted[0];
+		let prev = sorted[0];
+
+		for (let i = 1; i < sorted.length; i++) {
+			const curr = sorted[i];
+			if (curr === prev + 1) {
+				prev = curr;
+			} else {
+				ranges.push(start === prev ? `${start}` : `${start}-${prev}`);
+				start = curr;
+				prev = curr;
+			}
+		}
+		ranges.push(start === prev ? `${start}` : `${start}-${prev}`);
+		return ranges.join(', ');
+	}
+
+	function togglePageSelection(pageNum: number) {
+		if (splitMode === 'all') {
+			splitMode = 'ranges';
+		}
+		const currentPages = new Set(parsedRanges.flat().map((p) => p + 1));
+		if (currentPages.has(pageNum)) {
+			currentPages.delete(pageNum);
+		} else {
+			currentPages.add(pageNum);
+		}
+		rangeInput = numbersToRangeString(Array.from(currentPages));
+	}
+
+	function selectAllPages() {
+		if (splitMode === 'all') splitMode = 'ranges';
+		rangeInput = totalPages > 1 ? `1-${totalPages}` : '1';
+	}
+
+	function deselectAllPages() {
+		if (splitMode === 'all') splitMode = 'ranges';
+		rangeInput = '';
+	}
+
+	function invertSelection() {
+		if (splitMode === 'all') splitMode = 'ranges';
+		const currentPages = new Set(parsedRanges.flat().map((p) => p + 1));
+		const inverted: number[] = [];
+		for (let i = 1; i <= totalPages; i++) {
+			if (!currentPages.has(i)) inverted.push(i);
+		}
+		rangeInput = numbersToRangeString(inverted);
+	}
+
+	async function openInspect(pageNum: number) {
+		inspectedPage = pageNum;
+		if (!fileBuffer) return;
+		isLoadingHighRes = true;
+		try {
+			const highRes = await generateThumbnail(fileBuffer, pageNum, 700);
+			inspectedHighResUrl = highRes;
+		} finally {
+			isLoadingHighRes = false;
+		}
+	}
+
+	function closeInspect() {
+		inspectedPage = null;
+		inspectedHighResUrl = '';
+	}
+
+	function changeInspectPage(delta: number) {
+		if (inspectedPage === null) return;
+		const next = inspectedPage + delta;
+		if (next >= 1 && next <= totalPages) {
+			openInspect(next);
+		}
+	}
+
 	async function handleFileSelect(files: File[]) {
 		if (!files || files.length === 0) return;
 		const file = files[0];
 		currentFile = file;
+		pageThumbnails = {};
+		inspectedPage = null;
+		inspectedHighResUrl = '';
 		if (lastOutputUrl) {
 			URL.revokeObjectURL(lastOutputUrl);
 			lastOutputUrl = '';
@@ -74,6 +181,16 @@
 
 			rangeInput = totalPages > 1 ? `1-${Math.min(totalPages, 3)}` : '1';
 			thumbnail = await generateThumbnail(buffer, 1, 160);
+			pageThumbnails[1] = thumbnail;
+
+			// Asynchronously generate remaining thumbnails without blocking
+			isLoadingThumbnails = true;
+			const pageNums = Array.from({ length: totalPages }, (_, i) => i + 1);
+			generateBatchThumbnails(buffer, pageNums, 160, (pageNum, dataUrl) => {
+				pageThumbnails[pageNum] = dataUrl;
+			}).finally(() => {
+				isLoadingThumbnails = false;
+			});
 		} catch (err) {
 			console.error('Failed to load PDF for split:', err);
 			toast.show(i18n.t('tools.splitRangePdf.toastError'), 'error');
@@ -85,6 +202,9 @@
 		fileBuffer = null;
 		totalPages = 0;
 		thumbnail = '';
+		pageThumbnails = {};
+		inspectedPage = null;
+		inspectedHighResUrl = '';
 		if (lastOutputUrl) {
 			URL.revokeObjectURL(lastOutputUrl);
 			lastOutputUrl = '';
@@ -350,6 +470,121 @@
 					</div>
 				{/if}
 
+				<!-- Interactive Visual Page Grid & Preview -->
+				<div class="border-t border-slate-100 pt-6 space-y-4">
+					<div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+						<div class="space-y-0.5">
+							<div class="flex items-center gap-2">
+								<Eye class="w-4 h-4 text-rose-600" />
+								<h4 class="text-xs font-extrabold text-slate-800 uppercase tracking-wider">
+									{i18n.t('tools.splitRangePdf.visualGridTitle')}
+								</h4>
+								{#if isLoadingThumbnails}
+									<Loader2 class="w-3.5 h-3.5 text-rose-500 animate-spin" />
+								{/if}
+							</div>
+							<p class="text-[11px] text-slate-500 font-medium">
+								{i18n.t('tools.splitRangePdf.visualGridSubtitle')}
+							</p>
+						</div>
+
+						<div class="flex items-center gap-1.5 flex-wrap">
+							<button
+								type="button"
+								onclick={selectAllPages}
+								class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition"
+							>
+								{i18n.t('tools.splitRangePdf.selectAll')}
+							</button>
+							<button
+								type="button"
+								onclick={deselectAllPages}
+								class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition"
+							>
+								{i18n.t('tools.splitRangePdf.deselectAll')}
+							</button>
+							<button
+								type="button"
+								onclick={invertSelection}
+								class="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-lg transition"
+							>
+								{i18n.t('tools.splitRangePdf.invertSelection')}
+							</button>
+						</div>
+					</div>
+
+					<!-- Page Grid Thumbnails -->
+					<div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3 max-h-[460px] overflow-y-auto p-2 bg-slate-50/70 border border-slate-200/80 rounded-xl">
+						{#each Array.from({ length: totalPages }, (_, i) => i + 1) as pageNum}
+							{@const rangeBadge = getPageRangeBadge(pageNum)}
+							<div
+								role="button"
+								tabindex="0"
+								onclick={() => togglePageSelection(pageNum)}
+								onkeydown={(e) => {
+									if (e.key === 'Enter' || e.key === ' ') {
+										e.preventDefault();
+										togglePageSelection(pageNum);
+									}
+								}}
+								class="group relative rounded-xl border-2 transition-all cursor-pointer overflow-hidden p-2 flex flex-col justify-between select-none {rangeBadge.isSelected
+									? 'bg-rose-50/40 border-rose-500 shadow-xs'
+									: 'bg-white border-slate-200 hover:border-slate-300 opacity-60 hover:opacity-100'}"
+							>
+								<!-- Top Status Bar in Card -->
+								<div class="flex items-center justify-between w-full mb-1.5 z-10">
+									{#if rangeBadge.isSelected}
+										<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-rose-600 text-white text-[10px] font-bold shadow-xs">
+											<Check class="w-3 h-3 stroke-[3]" />
+											<span>{splitMode === 'all' ? `P.${pageNum}` : `R#${rangeBadge.rangeIndex}`}</span>
+										</span>
+									{:else}
+										<span class="px-1.5 py-0.5 rounded-md bg-slate-200 text-slate-600 text-[10px] font-bold">
+											P.{pageNum}
+										</span>
+									{/if}
+
+									<!-- Click-to-Inspect Button -->
+									<button
+										type="button"
+										onclick={(e) => {
+											e.stopPropagation();
+											openInspect(pageNum);
+										}}
+										class="p-1 rounded-md bg-white/90 hover:bg-rose-100 text-slate-500 hover:text-rose-600 border border-slate-200/70 shadow-xs transition"
+										title={i18n.t('tools.splitRangePdf.inspectPage')}
+									>
+										<ZoomIn class="w-3.5 h-3.5" />
+									</button>
+								</div>
+
+								<!-- Document Thumbnail Preview -->
+								<div class="w-full h-32 bg-slate-100 rounded-lg flex items-center justify-center overflow-hidden border border-slate-200/60 relative">
+									{#if pageThumbnails[pageNum]}
+										<img
+											src={pageThumbnails[pageNum]}
+											alt="Page {pageNum}"
+											class="max-w-full max-h-full object-contain pointer-events-none"
+										/>
+									{:else}
+										<div class="flex flex-col items-center gap-1 text-slate-400">
+											<Loader2 class="w-4 h-4 animate-spin text-slate-400" />
+											<span class="text-[10px] font-semibold">P.{pageNum}</span>
+										</div>
+									{/if}
+								</div>
+
+								<!-- Bottom Label -->
+								<div class="mt-1.5 text-center">
+									<span class="text-[11px] font-bold text-slate-700">
+										Page {pageNum}
+									</span>
+								</div>
+							</div>
+						{/each}
+					</div>
+				</div>
+
 				<!-- Action CTA -->
 				<div class="border-t border-slate-100 pt-5 flex justify-end">
 					<button
@@ -447,4 +682,97 @@
 			</div>
 		</div>
 	</div>
+
+	<!-- Page Lightbox / Inspector Modal -->
+	{#if inspectedPage !== null}
+		{@const rangeBadge = getPageRangeBadge(inspectedPage)}
+		<div class="fixed inset-0 z-50 bg-slate-950/75 backdrop-blur-xs flex items-center justify-center p-4">
+			<div class="bg-white rounded-2xl max-w-2xl w-full p-5 sm:p-6 shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
+				<!-- Modal Header -->
+				<div class="flex items-center justify-between border-b border-slate-100 pb-3">
+					<div class="flex items-center gap-2">
+						<Eye class="w-4 h-4 text-rose-600" />
+						<h3 class="text-sm font-bold text-slate-900 font-title">
+							{i18n.t('tools.splitRangePdf.pagePreviewModal')} — Page {inspectedPage} of {totalPages}
+						</h3>
+					</div>
+
+					<div class="flex items-center gap-2">
+						<!-- Prev / Next Page -->
+						<div class="flex items-center gap-1 bg-slate-100 rounded-lg p-0.5">
+							<button
+								type="button"
+								disabled={inspectedPage <= 1}
+								onclick={() => changeInspectPage(-1)}
+								class="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition"
+								title="Previous Page"
+							>
+								<ChevronLeft class="w-4 h-4" />
+							</button>
+							<button
+								type="button"
+								disabled={inspectedPage >= totalPages}
+								onclick={() => changeInspectPage(1)}
+								class="p-1 rounded hover:bg-white text-slate-600 disabled:opacity-30 disabled:cursor-not-allowed transition"
+								title="Next Page"
+							>
+								<ChevronRight class="w-4 h-4" />
+							</button>
+						</div>
+
+						<button
+							type="button"
+							onclick={closeInspect}
+							class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+							title="Close"
+						>
+							<X class="w-5 h-5" />
+						</button>
+					</div>
+				</div>
+
+				<!-- High-Res Document Render Viewport -->
+				<div class="w-full flex-1 min-h-[350px] bg-slate-100/80 bg-dot-grid rounded-xl border border-slate-200/80 p-4 flex items-center justify-center overflow-auto relative shadow-inner">
+					{#if isLoadingHighRes}
+						<div class="flex flex-col items-center gap-2 text-rose-600">
+							<Loader2 class="w-7 h-7 animate-spin" />
+							<span class="text-xs font-semibold text-slate-600">Rendering high-res page...</span>
+						</div>
+					{:else if inspectedHighResUrl}
+						<img
+							src={inspectedHighResUrl}
+							alt="Page {inspectedPage} Preview"
+							class="max-w-full max-h-[60vh] object-contain rounded shadow bg-white border border-slate-200"
+						/>
+					{/if}
+				</div>
+
+				<!-- Modal Actions -->
+				<div class="flex items-center justify-between pt-2 border-t border-slate-100">
+					<button
+						type="button"
+						onclick={() => inspectedPage && togglePageSelection(inspectedPage)}
+						class="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold rounded-xl transition {rangeBadge.isSelected
+							? 'bg-rose-100 text-rose-700 hover:bg-rose-200'
+							: 'bg-rose-600 text-white hover:bg-rose-700'}"
+					>
+						{#if rangeBadge.isSelected}
+							<Check class="w-4 h-4" />
+							<span>Included in Range (Click to Remove)</span>
+						{:else}
+							<span>+ Add Page to Range</span>
+						{/if}
+					</button>
+
+					<button
+						type="button"
+						onclick={closeInspect}
+						class="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+					>
+						Close
+					</button>
+				</div>
+			</div>
+		</div>
+	{/if}
 </div>
