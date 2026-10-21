@@ -27,7 +27,13 @@ Automatically split a bulk certificate PDF into individual files named after eac
 * **Visual Document Workbench**: Visual preview with zoom controls (50% to 200%) to inspect text placement.
 * **Local ZIP Generation**: Packages all split, custom-named certificates into a compressed `.zip` archive.
 
-### 2. PDF Merge
+### 2. Split PDF by Range
+Extract specific page ranges or extract all pages into separate files.
+* **Flexible Modes**: Specify custom ranges (e.g. `1-3, 5, 8-10`) or extract every page into individual 1-page documents.
+* **Merge Option**: Optionally combine all chosen ranges into one continuous output document.
+* **Smart Downloads**: Automatically downloads single PDF for single range, or packages multiple parts into a `.zip` archive.
+
+### 3. PDF Merge
 Combine multiple individual PDF documents into a single document with custom ordering.
 * **Interactive Ordering**: Drag or use up/down controls to arrange documents in the exact order desired.
 * **Live Thumbnails**: Instant client-side page 1 preview for each uploaded document.
@@ -114,13 +120,13 @@ bun run build
 We are designing PDFTools to grow into a complete open-source, client-side alternative to services like iLovePDF.
 
 - [x] **PDF Certificate Splitter & Renamer** (Completed)
+- [x] **Split PDF by Range** (Completed)
 - [x] **PDF Merge** (Completed)
 - [x] **PDF Compressor** (Completed)
 - [x] **PDF to Images / Image Extractor** (Completed)
 - [x] **Images to PDF** (Completed)
 - [x] **Rotate & Organize Pages** (Completed)
 - [x] **Page Numbers & Watermark** (Completed)
-- [ ] **Protect & Unlock PDF**: Locally password-protect files or remove encryption layers.
 
 ---
 

@@ -138,4 +138,33 @@ describe('PDF Engine Core Operations', () => {
 		const content1 = await zipRead.file('test1.txt')?.async('string');
 		expect(content1).toBe('Hello World 1');
 	});
+
+	test('6. PDF Split by Range: extracts ranges and separate page documents', async () => {
+		const { parsePageRanges } = await import('../src/lib/utils/pdf-helper');
+
+		// Range parsing test
+		const ranges = parsePageRanges('1-3, 5, 8-10', 10);
+		expect(ranges).toEqual([
+			[0, 1, 2],
+			[4],
+			[7, 8, 9]
+		]);
+
+		// Create 10-page document
+		const doc = await PDFDocument.create();
+		for (let i = 0; i < 10; i++) {
+			doc.addPage([500, 500]);
+		}
+		const docBytes = await doc.save();
+
+		// Split range 1-3
+		const srcDoc = await PDFDocument.load(docBytes);
+		const splitDoc = await PDFDocument.create();
+		const copiedPages = await splitDoc.copyPages(srcDoc, ranges[0]);
+		for (const p of copiedPages) splitDoc.addPage(p);
+
+		const splitBytes = await splitDoc.save();
+		const verifySplit = await PDFDocument.load(splitBytes);
+		expect(verifySplit.getPageCount()).toBe(3);
+	});
 });

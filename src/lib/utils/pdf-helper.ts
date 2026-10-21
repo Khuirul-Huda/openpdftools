@@ -95,6 +95,31 @@ export async function getPdfLib(): Promise<PdfLibModule> {
 	return pdfLib;
 }
 
+export function parsePageRanges(rangeStr: string, maxPages: number): number[][] {
+	const parts = rangeStr.split(',').map((s) => s.trim()).filter(Boolean);
+	const result: number[][] = [];
+	for (const part of parts) {
+		if (part.includes('-')) {
+			const [startStr, endStr] = part.split('-').map((s) => s.trim());
+			const start = parseInt(startStr, 10);
+			const end = parseInt(endStr, 10);
+			if (!isNaN(start) && !isNaN(end) && start > 0 && end >= start) {
+				const range: number[] = [];
+				for (let i = Math.max(1, start); i <= Math.min(maxPages, end); i++) {
+					range.push(i - 1); // 0-based
+				}
+				if (range.length > 0) result.push(range);
+			}
+		} else {
+			const num = parseInt(part, 10);
+			if (!isNaN(num) && num > 0 && num <= maxPages) {
+				result.push([num - 1]);
+			}
+		}
+	}
+	return result;
+}
+
 export function formatBytes(bytes: number, decimals = 1): string {
 	if (bytes === 0) return '0 B';
 	const k = 1024;
