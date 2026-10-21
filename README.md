@@ -50,6 +50,18 @@ Transform multiple photo scans and digital images into a formatted PDF document.
 * **Custom Layouts**: Select paper sizes (A4, US Letter, Fit to Image), orientations (Auto, Portrait, Landscape), and margins.
 * **Interactive Sequence**: Reorder pictures freely before compiling the PDF document.
 
+### 6. Rotate & Organize Pages
+Visually inspect, reorder, rotate, and delete pages from any PDF document.
+* **Interactive Grid**: Thumbnails for every page with CSS-rendered rotation feedback.
+* **Reorder & Purge**: Move pages forward/backward or delete unwanted/blank pages.
+* **Bulk Rotation**: Rotate individual pages or all pages at once in 90-degree increments.
+
+### 7. Page Numbers & Watermark
+Stamp official confidential watermarks and customized page numbers onto documents.
+* **Dual Feature Controls**: Apply page numbers, watermarks, or both simultaneously.
+* **Full Customization**: Control positions, text content, opacity, font size, colors, and diagonal rotation.
+* **Vector Text Embedding**: Uses standard Helvetica typography embedded directly in browser memory.
+
 ---
 
 ## 🛠️ Technical Architecture & Stack
@@ -106,8 +118,9 @@ We are designing PDFTools to grow into a complete open-source, client-side alter
 - [x] **PDF Compressor** (Completed)
 - [x] **PDF to Images / Image Extractor** (Completed)
 - [x] **Images to PDF** (Completed)
-- [ ] **Rotate & Organize Pages**: Interactive visual grid to rotate, reorder, or delete individual pages.
-- [ ] **Encrypt / Decrypt PDF**: Locally password-protect files or remove encryption layers.
+- [x] **Rotate & Organize Pages** (Completed)
+- [x] **Page Numbers & Watermark** (Completed)
+- [ ] **Protect & Unlock PDF**: Locally password-protect files or remove encryption layers.
 
 ---
 

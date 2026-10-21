@@ -21,21 +21,39 @@ export interface PdfJsModule {
 	getDocument: (options: { data: ArrayBuffer | Uint8Array }) => { promise: Promise<PdfJsDocument> };
 }
 
-export type PdfLibPage = unknown;
+export interface PdfLibPage {
+	getWidth: () => number;
+	getHeight: () => number;
+	getRotation: () => { angle: number };
+	setRotation: (angle: unknown) => void;
+	drawText: (text: string, options?: Record<string, unknown>) => void;
+}
 
 export interface PdfLibDocument {
 	getPageCount: () => number;
 	getPage: (index: number) => PdfLibPage;
+	getPages: () => PdfLibPage[];
 	copyPages: (srcDoc: PdfLibDocument, pageIndexes: number[]) => Promise<PdfLibPage[]>;
-	addPage: (page: PdfLibPage) => void;
+	addPage: (page?: PdfLibPage | [number, number]) => PdfLibPage;
 	removePage: (index: number) => void;
 	save: () => Promise<Uint8Array>;
 	setTitle?: (title: string) => void;
 	setProducer?: (producer: string) => void;
 	setCreator?: (creator: string) => void;
+	embedFont: (font: unknown) => Promise<unknown>;
+	embedPng: (bytes: Uint8Array) => Promise<{ width: number; height: number }>;
+	embedJpg: (bytes: Uint8Array) => Promise<{ width: number; height: number }>;
 }
 
 export interface PdfLibModule {
+	degrees: (deg: number) => unknown;
+	rgb: (r: number, g: number, b: number) => unknown;
+	StandardFonts: {
+		Helvetica: string;
+		HelveticaBold: string;
+		TimesRoman: string;
+		Courier: string;
+	};
 	PDFDocument: {
 		create: () => Promise<PdfLibDocument>;
 		load: (data: ArrayBuffer | Uint8Array, options?: { ignoreEncryption?: boolean }) => Promise<PdfLibDocument>;
